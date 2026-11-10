@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import { getGeminiApiKeys, shouldTryAnotherGeminiKey } from './geminiApiKeys.js';
 
 const MODEL = 'gemini-3.8-flash';
 const FALLBACK_MODEL = 'gemini-3.1-flash-lite';
@@ -39,46 +40,48 @@ export function sanitizeSpokenText(text) {
   return sanitized;
 }
 
-function getGeminiClient() {
-  if (!process.env.GEMINI_API_KEY) {
-    throw new Error('GEMINI_API_KEY is required to use Gemini.');
-  }
-  return new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY,
-    httpOptions: {
-      timeout: 10000,
-      retryOptions: { attempts: 1 },
-    },
-  });
-}
-
 async function generateContent(contents, config) {
-  const client = getGeminiClient();
-  for (const [index, model] of MODELS.entries()) {
-    try {
-      const response = await client.models.generateContent({ model, contents, config });
-      return { model, response };
-    } catch (error) {
-      const status = error && typeof error === 'object' && 'status' in error
-        ? error.status
-        : undefined;
-      if ((status === 429 || status === 503 || status === 504) && index < MODELS.length - 1) {
-        console.warn(`Gemini model ${model} is busy; retrying with ${MODELS[index + 1]}.`);
-        continue;
+  const apiKeys = getGeminiApiKeys();
+  let lastError;
+  for (const [keyIndex, apiKey] of apiKeys.entries()) {
+    const client = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        timeout: 10000,
+        retryOptions: { attempts: 1 },
+      },
+    });
+    for (const [modelIndex, model] of MODELS.entries()) {
+      try {
+        const response = await client.models.generateContent({ model, contents, config });
+        return { model, response };
+      } catch (error) {
+        lastError = error;
+        const status = error && typeof error === 'object' && 'status' in error
+          ? error.status
+          : undefined;
+        if ([429, 503, 504].includes(status) && modelIndex < MODELS.length - 1) {
+          console.warn(`Gemini model ${model} is busy; retrying with ${MODELS[modelIndex + 1]}.`);
+          continue;
+        }
+        if (keyIndex < apiKeys.length - 1 && shouldTryAnotherGeminiKey(error)) {
+          console.warn(`Gemini API key ${keyIndex + 1} failed; retrying with the next configured key.`);
+          break;
+        }
+        if ([429, 503, 504].includes(status)) {
+          const message = status === 429
+            ? 'Gemini request limit reached. Check the API quota or try again later.'
+            : 'Gemini is temporarily unavailable due to high demand. Please try again shortly.';
+          throw Object.assign(new Error(message, { cause: error }), {
+            statusCode: status,
+            publicMessage: message,
+          });
+        }
+        throw error;
       }
-      if (status === 429 || status === 503 || status === 504) {
-        const message = status === 429
-          ? 'Gemini request limit reached. Check the API quota or try again later.'
-          : 'Gemini is temporarily unavailable due to high demand. Please try again shortly.';
-        throw Object.assign(new Error(message, { cause: error }), {
-          statusCode: status,
-          publicMessage: message,
-        });
-      }
-      throw error;
     }
   }
-  throw new Error('Gemini generation failed without a provider response.');
+  throw lastError ?? new Error('Gemini generation failed without a provider response.');
 }
 
 export async function generateAutomatedShort(channelMemory, channelContext = {}) {

@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { GoogleGenAI } from '@google/genai';
 import { sanitizeSpokenText } from './geminiService.js';
+import { getGeminiApiKeys, shouldTryAnotherGeminiKey } from './geminiApiKeys.js';
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TEMP_DIRECTORY = path.join(PROJECT_ROOT, 'temp');
@@ -36,40 +37,49 @@ export async function generateVoiceover(text, outputPath) {
   if (!outputPath || path.extname(outputPath).toLowerCase() !== '.mp3') {
     throw new Error('Voiceover output path must use the .mp3 extension.');
   }
-  if (!process.env.GEMINI_API_KEY) {
-    throw new Error('GEMINI_API_KEY is required to generate a voiceover.');
-  }
-
-  const client = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY,
-    httpOptions: {
-      timeout: 30000,
-      retryOptions: { attempts: 1 },
-    },
-  });
   let response;
-  try {
-    response = await client.models.generateContent({
-      model: process.env.GEMINI_TTS_MODEL || 'gemini-3.8-flash-tts',
-      contents: [{
-        parts: [{
-          text: spokenText,
+  const apiKeys = getGeminiApiKeys();
+  let lastError;
+  for (const [keyIndex, apiKey] of apiKeys.entries()) {
+    const client = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        timeout: 30000,
+        retryOptions: { attempts: 1 },
+      },
+    });
+    try {
+      response = await client.models.generateContent({
+        model: process.env.GEMINI_TTS_MODEL || 'gemini-3.8-flash-tts',
+        contents: [{
+          parts: [{
+            text: spokenText,
+          }],
         }],
-      }],
-      config: {
-        systemInstruction: 'Speak only the provided Hindi or Hinglish text naturally and exactly as written. Do not speak any instructions, labels, or formatting.',
-        responseModalities: ['AUDIO'],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: {
-              voiceName: process.env.GEMINI_TTS_VOICE || 'Puck',
+        config: {
+          systemInstruction: 'Speak only the provided Hindi or Hinglish text naturally and exactly as written. Do not speak any instructions, labels, or formatting.',
+          responseModalities: ['AUDIO'],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: process.env.GEMINI_TTS_VOICE || 'Puck',
+              },
             },
           },
         },
-      },
-    });
-  } catch (error) {
-    throw providerError(error);
+      });
+      break;
+    } catch (error) {
+      lastError = error;
+      if (keyIndex < apiKeys.length - 1 && shouldTryAnotherGeminiKey(error)) {
+        console.warn(`Gemini TTS API key ${keyIndex + 1} failed; retrying with the next configured key.`);
+        continue;
+      }
+      throw providerError(error);
+    }
+  }
+  if (!response) {
+    throw providerError(lastError ?? new Error('Gemini text-to-speech failed without a provider response.'));
   }
 
   const audio = response.candidates?.[0]?.content?.parts
