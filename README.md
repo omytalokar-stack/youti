@@ -10,6 +10,13 @@ Dimag AI includes a Vite frontend and an Express/MongoDB backend for channel mem
 4. Start the backend with `npm run dev` or `npm start`; start the frontend separately with `npm run dev:client`. Vite proxies `/api` to `http://localhost:5000`; set `BACKEND_URL` to use another backend during frontend development. For separate production hosting, set `VITE_API_URL` to the backend API base URL during the frontend build.
 5. Install FFmpeg and FFprobe with the `libass` subtitles filter on the backend host. Put licensed vertical background clips in `assets/backgrounds/`, optional licensed whoosh/impact SFX in `assets/sfx/`, ambient/tension music in `assets/audio/` (use a filename containing `ambient`, `bgm`, `music`, `suspense`, or `tension`), and a Hindi-capable font in `assets/fonts/`. If no background is present, the renderer creates a dark gradient background. Missing audio assets fall back to voiceover-only.
 
+## Install on mobile or desktop
+
+- The frontend is an installable Progressive Web App (PWA). Open the deployed site over HTTPS, then go to **Settings → Open install page → Install Dimag AI**. Supported browsers show their native install prompt; if the prompt is unavailable, use the browser menu's **Install app** or **Add to Home screen** action.
+- On iPhone/iPad, open the site in Safari, tap **Share → Add to Home Screen → Add**.
+- The PWA uses the pink app icon and can cache the app shell/static assets for offline launch. API actions still require an internet connection and the backend.
+- This creates a browser-installed web app, not an APK or a Play Store/App Store package.
+
 The OAuth encryption key must be 32 random bytes encoded as 64 hex characters. The OAuth state secret should be a separate random secret. Never commit `.env`.
 Set `FRONTEND_URL` to the frontend origin and set `YOUTUBE_REDIRECT_URI` to the exact callback registered in Google Cloud. The video table includes the 10 latest uploads and their YouTube Data API view counts immediately; subscriber changes and watch hours are from the latest 90 days of YouTube Analytics and may take 24–48 hours to process. Channel totals are lifetime totals from the Data API.
 

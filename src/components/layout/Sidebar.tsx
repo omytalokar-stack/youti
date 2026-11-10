@@ -1,16 +1,17 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { TabId } from '../../types';
-import { 
-  BarChart3, 
-  Sparkles, 
-  Cpu, 
-  Settings, 
-  Sun, 
-  Moon, 
+import {
+  BarChart3,
+  Sparkles,
+  Cpu,
+  Settings,
+  Sun,
+  Moon,
   Radio,
   PlaySquare,
-  CheckCircle2
+  CheckCircle2,
+  Download,
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -41,6 +42,12 @@ export const Sidebar: React.FC = () => {
       icon: <Settings className="w-4 h-4 shrink-0" />,
       badge: settings.selectedChannelId ? 'Connected' : 'Connect',
     },
+    {
+      id: 'install',
+      label: 'Install App',
+      icon: <Download className="w-4 h-4 shrink-0" />,
+      badge: 'PWA',
+    },
   ];
 
   return (
@@ -48,7 +55,7 @@ export const Sidebar: React.FC = () => {
         {/* Brand Lockup: Clean One-line Brand Wordmark */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-[#222426]">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 via-purple-500 to-rose-500 p-0.5 shadow-sm flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-pink-500 via-fuchsia-500 to-rose-500 p-0.5 shadow-sm flex items-center justify-center">
               <div className="w-full h-full bg-[#131314] rounded-[6px] flex items-center justify-center">
                 <PlaySquare className="w-4 h-4 text-rose-500" />
               </div>

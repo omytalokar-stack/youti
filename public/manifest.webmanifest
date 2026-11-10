@@ -1,0 +1,25 @@
+{
+  "id": "/",
+  "name": "Dimag AI - YouTube Creator Workspace",
+  "short_name": "Dimag AI",
+  "description": "YouTube creator analytics, Gemini Studio, and channel tools.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#131314",
+  "theme_color": "#ec4899",
+  "icons": [
+    {
+      "src": "/pwa-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-export type TabId = 'analytics' | 'gemini' | 'brain' | 'settings';
+export type TabId = 'analytics' | 'gemini' | 'brain' | 'settings' | 'install';
 
 export interface ConnectedChannel {
   channelId: string;

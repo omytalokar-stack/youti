@@ -26,9 +26,17 @@ interface BrainMemoryResponse {
   mistakeLogs: Array<Omit<MistakeLog, 'id'> & { _id: string }>;
 }
 
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
+}
+
 interface AppContextType {
   activeTab: TabId;
   setActiveTab: (tab: TabId) => void;
+  canInstallApp: boolean;
+  isAppInstalled: boolean;
+  installApp: () => Promise<void>;
   theme: 'dark' | 'light';
   toggleTheme: () => void;
   settings: AppSettings;
@@ -102,6 +110,8 @@ function mapMemory(memory: BrainMemoryResponse) {
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<TabId>('analytics');
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [isAppInstalled, setIsAppInstalled] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [settings, setSettings] = useState<AppSettings>(readSettings);
   const [channels, setChannels] = useState<ConnectedChannel[]>([]);
@@ -129,6 +139,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setToasts((current) => [...current, { id, title, message, type, action }]);
     window.setTimeout(() => setToasts((current) => current.filter((toast) => toast.id !== id)), 5000);
   }, []);
+
+  const installApp = useCallback(async () => {
+    if (!installPrompt) return;
+    await installPrompt.prompt();
+    const choice = await installPrompt.userChoice;
+    setInstallPrompt(null);
+    if (choice.outcome === 'accepted') {
+      addToast('Installation started', 'Dimag AI is being added to your device.', 'success');
+    }
+  }, [addToast, installPrompt]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(display-mode: standalone)');
+    const updateInstalledState = () => {
+      setIsAppInstalled(mediaQuery.matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone));
+    };
+    const handleInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as BeforeInstallPromptEvent);
+    };
+    const handleInstalled = () => {
+      setInstallPrompt(null);
+      setIsAppInstalled(true);
+      addToast('Dimag AI installed', 'You can now open the app from your home screen.', 'success');
+    };
+
+    updateInstalledState();
+    mediaQuery.addEventListener('change', updateInstalledState);
+    window.addEventListener('beforeinstallprompt', handleInstallPrompt);
+    window.addEventListener('appinstalled', handleInstalled);
+    return () => {
+      mediaQuery.removeEventListener('change', updateInstalledState);
+      window.removeEventListener('beforeinstallprompt', handleInstallPrompt);
+      window.removeEventListener('appinstalled', handleInstalled);
+    };
+  }, [addToast]);
 
   const updateSettings = useCallback((newSettings: Partial<AppSettings>) => {
     setSettings((current) => ({ ...current, ...newSettings }));
@@ -381,6 +427,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const value: AppContextType = {
     activeTab,
     setActiveTab,
+    canInstallApp: installPrompt !== null,
+    isAppInstalled,
+    installApp,
     theme,
     toggleTheme,
     settings,

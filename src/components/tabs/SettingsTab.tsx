@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle2, ExternalLink, KeyRound, LoaderCircle, Radio, RefreshCw, ShieldCheck, Unplug } from 'lucide-react';
+import { ArrowRight, CheckCircle2, ExternalLink, KeyRound, LoaderCircle, Radio, RefreshCw, ShieldCheck, Unplug } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { apiRequest } from '../../services/api';
 
@@ -8,6 +8,7 @@ export const SettingsTab: React.FC = () => {
     channels,
     channel,
     settings,
+    setActiveTab,
     updateSettings,
     isLoadingChannels,
     channelError,
@@ -159,6 +160,22 @@ export const SettingsTab: React.FC = () => {
         >
           {checkingGemini && <LoaderCircle className="w-4 h-4 animate-spin" />}
           {checkingGemini ? 'Checking Gemini…' : 'Test Gemini connection'}
+        </button>
+      </section>
+
+      <section className="flex flex-col gap-4 rounded-2xl border border-pink-200 bg-pink-50 p-5 dark:border-pink-900/50 dark:bg-pink-950/20 md:flex-row md:items-center md:justify-between md:p-6">
+        <div>
+          <h2 className="font-semibold text-slate-900 dark:text-white">Install Dimag AI on your device</h2>
+          <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+            Add the app to your phone or desktop home screen for a full-screen app experience.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setActiveTab('install')}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-pink-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-pink-500 sm:w-auto"
+        >
+          Open install page <ArrowRight className="h-4 w-4" />
         </button>
       </section>
 
