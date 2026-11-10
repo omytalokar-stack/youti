@@ -90,12 +90,14 @@ Current renderer Gemini se har scene ka alag AI video/image nahi banata. Visual 
 
 ## 5. Scheduled publishing
 
-- Default schedule: `0 9 * * *`.
-- Default timezone: `America/Los_Angeles`.
+- Default daily start: `16:00` in `Asia/Kolkata`.
+- Scheduler `*/30 * * * *` par due channels check karta hai; failed generation/upload par har 30 minute retry karta hai aur MongoDB state mein successful daily cycle save karta hai.
+- Retry success hone par us din ke baaki retries rukte hain; agla scheduled cycle agle din `16:00` par shuru hota hai.
 - Schedule har connected channel par publishing pipeline chalane ki koshish karta hai.
 - Sirf upload scope wale channels publish ho sakte hain; scheduler per-channel failure log karke agle channel par aage badhta hai.
 - MongoDB lease multiple worker instances ke beech same channel ke overlapping upload ko rokne mein madad karta hai.
 - `AUTOMATION_CRON=disabled` ya `AUTOMATION_CRON=off` scheduler band karta hai.
+- `AUTOMATION_START_HOUR` local timezone mein daily start hour (0–23) hai; `AUTOMATION_TIMEZONE` default `Asia/Kolkata` hai. Retry behavior ke liye `AUTOMATION_CRON` `*/30 * * * *` rakhein.
 - Backend ko scheduled waqt par chalte rehna chahiye. Sleeping machine/serverless deployment mein external scheduler ya always-on worker chahiye.
 - Is waqt app mein cron ka alag dashboard toggle nahi hai; schedule backend environment se configure hota hai.
 
@@ -117,12 +119,14 @@ Current renderer Gemini se har scene ka alag AI video/image nahi banata. Visual 
 - `server.js` — Express app, CORS, JSON parsing, request logging, health route, error handler, MongoDB aur scheduler startup.
 - `routes/brainRoutes.js` — channel memory, chat, text-only cycle, public publish, tactics aur mistakes endpoints.
 - `routes/youtubeRoutes.js` — OAuth callback, channel list, disconnect aur analytics endpoints.
-- `services/geminiService.js` — script/topic generation, format validation, Gemini model fallback aur chat.
-- `services/ttsService.js` — Gemini TTS audio generation aur MP3 conversion.
+- `services/geminiService.js` — script/topic generation, format validation, Gemini model aur API-key fallback, chat.
+- `services/geminiApiKeys.js` — backend environment se primary aur optional backup Gemini key.
+- `services/ttsService.js` — Gemini TTS API-key fallback, audio generation aur MP3 conversion.
 - `services/renderService.js` — FFmpeg/FFprobe checks, vertical render, subtitles, background/SFX handling aur 20-second limit.
 - `services/automationService.js` — credential checks se lekar generation, render, upload aur video log tak orchestration.
 - `services/automationLockService.js` — manual aur scheduled publish jobs ke liye shared MongoDB lease.
 - `services/schedulerService.js` — cron schedule aur per-channel automated publishing.
+- `models/AutomationScheduleState.js` — retry ke beech active daily cycle aur last successful scheduled cycle.
 - `services/youtubeService.js` — OAuth, encrypted credential handling, YouTube channel, recent upload catalog/live counts aur Analytics API operations.
 - `services/youtubeUploadService.js` — YouTube upload permission, metadata, privacy aur MP4 upload.
 - `config/db.js` — MongoDB connection.
@@ -133,6 +137,7 @@ Current renderer Gemini se har scene ka alag AI video/image nahi banata. Visual 
 - `BrainMemory` — tactics, mistake logs, self-correction mode aur last autonomous run.
 - `VideoLog` — successful uploads ke video ID, title, hook/tags, upload date aur status.
 - `AutomationLock` — channel publishing lease ID aur expiry.
+- `AutomationScheduleState` — channel ka pending daily cycle aur last successful cycle date.
 
 ## 7. API overview
 
@@ -163,10 +168,10 @@ Secrets ko `.env` mein backend par configure karein. `.env.example` variable nam
 Important settings:
 
 - `MONGODB_URI`, `PORT`, `FRONTEND_URL`
-- `GEMINI_API_KEY`, `GEMINI_TTS_MODEL`, `GEMINI_TTS_VOICE`
+- `GEMINI_API_KEY`, `GEMINI_API_KEY_2`, `GEMINI_TTS_MODEL`, `GEMINI_TTS_VOICE`
 - `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REDIRECT_URI`
 - `OAUTH_STATE_SECRET`, `YOUTUBE_TOKEN_ENCRYPTION_KEY`
-- `AUTOMATION_CRON`, `AUTOMATION_TIMEZONE`
+- `AUTOMATION_CRON`, `AUTOMATION_START_HOUR`, `AUTOMATION_TIMEZONE`
 - `YOUTUBE_UPLOAD_PRIVACY`, `YOUTUBE_CATEGORY_ID`, `YOUTUBE_MADE_FOR_KIDS`
 - `FFMPEG_PATH`, `FFPROBE_PATH`, `SUBTITLE_FONT`
 
