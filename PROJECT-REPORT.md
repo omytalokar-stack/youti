@@ -46,7 +46,7 @@ Dashboard ka **Create & Publish Short** button connected channel ke context aur 
 ### 3.3 Gemini Studio
 
 - Backend `GEMINI_API_KEY`, `GEMINI_API_KEY_2`, aur comma-separated `GEMINI_API_KEYS` se deduplicated key pool banata hai aur requests ko round-robin karta hai.
-- Script generation ka text-only fallback chain `gemini-2.5-flash`, `gemini-2.0-flash`, `gemini-1.5-flash`, aur `gemini-1.5-pro` hai; quota/key failures par key rotate hoti hai. Har request par adhiktam teen retries hote hain.
+- Script generation ka text-only fallback chain `gemini-flash-lite-latest`, `gemini-3-flash-preview`, `gemini-3.1-flash-lite`, aur `gemini-3.8-flash` hai; quota/key failures par key rotate hoti hai. Har request par adhiktam teen retries hote hain. Model 400/404 par backend actionable model-availability error deta hai, generic 500 nahi.
 - Chat apne configured text models par bounded fallback karta hai. TTS sirf `GEMINI_TTS_MODEL` audio request karta hai aur failure par text model par switch kiye bina API keys rotate karta hai.
 - Chat, response regenerate, copy aur local like/dislike controls available hain.
 - Chat history server ya MongoDB mein persist nahi hoti.

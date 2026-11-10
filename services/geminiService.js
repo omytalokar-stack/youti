@@ -1,7 +1,12 @@
 import { GoogleGenAI } from '@google/genai';
 import { getGeminiErrorStatus, runGeminiWithFallback } from './geminiApiKeys.js';
 
-const SCRIPT_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+const SCRIPT_MODELS = [
+  'gemini-flash-lite-latest',
+  'gemini-3-flash-preview',
+  'gemini-3.1-flash-lite',
+  'gemini-3.8-flash',
+];
 const CHAT_MODELS = ['gemini-3.8-flash', 'gemini-3.1-flash-lite'];
 
 const META_INSTRUCTION_LINE = /^\s*(?:(?:system|voiceover|narration|script|tts)\s+)?(?:instructions?\s*:|(?:do not|don't)\s+(?:translate|add|omit|read|repeat|say|include)\b|read\s+(?:this|the following)\b|say\s+exactly\b|return\s+only\b)/i;
@@ -61,13 +66,15 @@ async function generateContent(contents, config, models) {
     return { model, response };
   } catch (error) {
     const status = getGeminiErrorStatus(error);
-    if (![429, 503, 504].includes(status)) throw error;
+    if (![400, 404, 429, 503, 504].includes(status)) throw error;
 
     const message = status === 429
-      ? 'Gemini request limit reached. Check the API quota or try again later.'
-      : 'Gemini is temporarily unavailable. Please try again shortly.';
+      ? 'Gemini request limit reached. Check the API quota or try again shortly.'
+      : status === 400 || status === 404
+        ? 'Gemini rejected the configured text model or request. Check that the model is available for this API key.'
+        : 'Gemini is temporarily unavailable. Please try again shortly.';
     throw Object.assign(new Error(message, { cause: error }), {
-      statusCode: status,
+      statusCode: status === 400 || status === 404 ? 502 : status,
       publicMessage: message,
     });
   }
