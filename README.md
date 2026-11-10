@@ -19,6 +19,7 @@ Set `FRONTEND_URL` to the frontend origin and set `YOUTUBE_REDIRECT_URI` to the 
 - Spoken text is sanitized before synthesis; render output includes a neon-yellow hook card for the first 0.5 seconds, subtle background zoom, highlighted subtitles, and optional ducked BGM/zero-time hook SFX. Upload metadata appends `#Shorts` to the title and standard niche hashtags to the description.
 - Clicking **Create & Publish Short** in the dashboard or Agent Brain chooses a channel-relevant topic, generates the script, voiceover, and video, then immediately uploads it as **public**. Check the generated content and channel before clicking; this is a real public YouTube upload.
 - By default, `AUTOMATION_CRON=0 9 * * *` publishes once daily at 9:00 AM in `America/Los_Angeles`. This is a real automatic public-publishing schedule. Set `AUTOMATION_CRON=disabled` to turn it off, or change the expression/timezone.
+- `AUTOMATION_TIMEZONE` must be a valid IANA timezone, such as `Asia/Kolkata` or `America/Los_Angeles`; values like `Asia` are incomplete. If it is invalid, the backend still starts but scheduled publishing stays disabled until the value is corrected.
 - `YOUTUBE_UPLOAD_PRIVACY=public` controls scheduled uploads. The manual **Create & Publish Short** button always publishes publicly.
 - `YOUTUBE_CATEGORY_ID=22` sets YouTube's category ID (22 = People & Blogs).
 - `YOUTUBE_MADE_FOR_KIDS=false` must reflect the channel's actual audience; set it to `true` for content directed to children.

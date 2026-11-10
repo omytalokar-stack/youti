@@ -4,6 +4,7 @@ import { publishAutomatedShort } from './automationService.js';
 import { claimChannelLease, releaseChannelLease } from './automationLockService.js';
 
 const DEFAULT_SCHEDULE = '0 9 * * *';
+const DEFAULT_TIMEZONE = 'America/Los_Angeles';
 let scheduledTask = null;
 let scheduleInProgress = false;
 
@@ -49,9 +50,17 @@ export function startAutomationScheduler() {
     return null;
   }
   const schedule = configuredSchedule || DEFAULT_SCHEDULE;
-  const timezone = process.env.AUTOMATION_TIMEZONE || 'America/Los_Angeles';
+  const timezone = process.env.AUTOMATION_TIMEZONE?.trim() || DEFAULT_TIMEZONE;
   if (!cron.validate(schedule)) {
     throw new Error('AUTOMATION_CRON must be a valid cron expression, "off", or "disabled".');
+  }
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: timezone });
+  } catch {
+    console.error(
+      `[automation] Invalid AUTOMATION_TIMEZONE "${timezone}". Scheduled publishing is disabled; set a valid IANA timezone such as "Asia/Kolkata".`,
+    );
+    return null;
   }
 
   scheduledTask = cron.schedule(schedule, () => {
