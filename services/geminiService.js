@@ -1,9 +1,8 @@
 import { GoogleGenAI } from '@google/genai';
-import { getGeminiApiKeys, shouldTryAnotherGeminiKey } from './geminiApiKeys.js';
+import { getGeminiErrorStatus, runGeminiWithFallback } from './geminiApiKeys.js';
 
-const MODEL = 'gemini-3.8-flash';
-const FALLBACK_MODEL = 'gemini-3.1-flash-lite';
-const MODELS = [MODEL, FALLBACK_MODEL];
+const SCRIPT_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+const CHAT_MODELS = ['gemini-3.8-flash', 'gemini-3.1-flash-lite'];
 
 const META_INSTRUCTION_LINE = /^\s*(?:(?:system|voiceover|narration|script|tts)\s+)?(?:instructions?\s*:|(?:do not|don't)\s+(?:translate|add|omit|read|repeat|say|include)\b|read\s+(?:this|the following)\b|say\s+exactly\b|return\s+only\b)/i;
 const SCRIPT_LABEL = /^\s*(?:system instructions?|hook|narration|voiceover|voice-over|script|spoken text|dialogue|tts|output)\s*:\s*/i;
@@ -40,48 +39,38 @@ export function sanitizeSpokenText(text) {
   return sanitized;
 }
 
-async function generateContent(contents, config) {
-  const apiKeys = getGeminiApiKeys();
-  let lastError;
-  for (const [keyIndex, apiKey] of apiKeys.entries()) {
-    const client = new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        timeout: 10000,
-        retryOptions: { attempts: 1 },
+async function generateContent(contents, config, models) {
+  try {
+    const { model, value: response } = await runGeminiWithFallback({
+      models,
+      invoke: ({ apiKey, model: requestedModel }) => {
+        const client = new GoogleGenAI({
+          apiKey,
+          httpOptions: {
+            timeout: 10000,
+            retryOptions: { attempts: 1 },
+          },
+        });
+        return client.models.generateContent({
+          model: requestedModel,
+          contents,
+          config,
+        });
       },
     });
-    for (const [modelIndex, model] of MODELS.entries()) {
-      try {
-        const response = await client.models.generateContent({ model, contents, config });
-        return { model, response };
-      } catch (error) {
-        lastError = error;
-        const status = error && typeof error === 'object' && 'status' in error
-          ? error.status
-          : undefined;
-        if ([429, 503, 504].includes(status) && modelIndex < MODELS.length - 1) {
-          console.warn(`Gemini model ${model} is busy; retrying with ${MODELS[modelIndex + 1]}.`);
-          continue;
-        }
-        if (keyIndex < apiKeys.length - 1 && shouldTryAnotherGeminiKey(error)) {
-          console.warn(`Gemini API key ${keyIndex + 1} failed; retrying with the next configured key.`);
-          break;
-        }
-        if ([429, 503, 504].includes(status)) {
-          const message = status === 429
-            ? 'Gemini request limit reached. Check the API quota or try again later.'
-            : 'Gemini is temporarily unavailable due to high demand. Please try again shortly.';
-          throw Object.assign(new Error(message, { cause: error }), {
-            statusCode: status,
-            publicMessage: message,
-          });
-        }
-        throw error;
-      }
-    }
+    return { model, response };
+  } catch (error) {
+    const status = getGeminiErrorStatus(error);
+    if (![429, 503, 504].includes(status)) throw error;
+
+    const message = status === 429
+      ? 'Gemini request limit reached. Check the API quota or try again later.'
+      : 'Gemini is temporarily unavailable. Please try again shortly.';
+    throw Object.assign(new Error(message, { cause: error }), {
+      statusCode: status,
+      publicMessage: message,
+    });
   }
-  throw lastError ?? new Error('Gemini generation failed without a provider response.');
 }
 
 export async function generateAutomatedShort(channelMemory, channelContext = {}) {
@@ -116,6 +105,7 @@ export async function generateAutomatedShort(channelMemory, channelContext = {})
       systemInstruction,
       responseMimeType: 'application/json',
     },
+    SCRIPT_MODELS,
   );
   if (!response.text) {
     throw new Error('Gemini returned an empty response.');
@@ -173,14 +163,18 @@ export async function generateAutomatedShort(channelMemory, channelContext = {})
 }
 
 export async function generateChatResponse(prompt) {
-  const { model, response } = await generateContent(prompt, {
-    systemInstruction: 'You are Dimag AI, a helpful YouTube creator assistant. Be clear about uncertainty and never invent channel analytics.',
-  });
+  const { model, response } = await generateContent(
+    prompt,
+    {
+      systemInstruction: 'You are Dimag AI, a helpful YouTube creator assistant. Be clear about uncertainty and never invent channel analytics.',
+    },
+    CHAT_MODELS,
+  );
   if (!response.text) {
     throw new Error('Gemini returned an empty response.');
   }
   return {
     response: response.text,
-    model: model === MODEL ? 'Gemini 3.8 Flash' : 'Gemini 3.1 Flash-Lite',
+    model: model === CHAT_MODELS[0] ? 'Gemini 3.8 Flash' : 'Gemini 3.1 Flash-Lite',
   };
 }

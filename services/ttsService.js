@@ -6,16 +6,14 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { GoogleGenAI } from '@google/genai';
 import { sanitizeSpokenText } from './geminiService.js';
-import { getGeminiApiKeys, shouldTryAnotherGeminiKey } from './geminiApiKeys.js';
+import { getGeminiErrorStatus, runGeminiWithFallback } from './geminiApiKeys.js';
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TEMP_DIRECTORY = path.join(PROJECT_ROOT, 'temp');
 const executeFile = promisify(execFile);
 
 function providerError(error) {
-  const status = error && typeof error === 'object' && 'status' in error
-    ? error.status
-    : undefined;
+  const status = getGeminiErrorStatus(error);
   if (status !== 429 && status !== 503 && status !== 504) {
     return error;
   }
@@ -37,20 +35,22 @@ export async function generateVoiceover(text, outputPath) {
   if (!outputPath || path.extname(outputPath).toLowerCase() !== '.mp3') {
     throw new Error('Voiceover output path must use the .mp3 extension.');
   }
-  let response;
-  const apiKeys = getGeminiApiKeys();
-  let lastError;
-  for (const [keyIndex, apiKey] of apiKeys.entries()) {
-    const client = new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        timeout: 30000,
-        retryOptions: { attempts: 1 },
-      },
-    });
-    try {
-      response = await client.models.generateContent({
-        model: process.env.GEMINI_TTS_MODEL || 'gemini-3.8-flash-tts',
+  const ttsModel = process.env.GEMINI_TTS_MODEL?.trim() || 'gemini-3.8-flash-tts';
+  if (!/(?:^|[-_])tts(?:$|[-_])/i.test(ttsModel)) {
+    throw new Error('GEMINI_TTS_MODEL must name an audio-capable TTS model; text-only Gemini models cannot synthesize voiceover.');
+  }
+  const { value: response } = await runGeminiWithFallback({
+    models: [ttsModel],
+    invoke: ({ apiKey, model }) => {
+      const client = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          timeout: 30000,
+          retryOptions: { attempts: 1 },
+        },
+      });
+      return client.models.generateContent({
+        model,
         contents: [{
           parts: [{
             text: spokenText,
@@ -68,19 +68,10 @@ export async function generateVoiceover(text, outputPath) {
           },
         },
       });
-      break;
-    } catch (error) {
-      lastError = error;
-      if (keyIndex < apiKeys.length - 1 && shouldTryAnotherGeminiKey(error)) {
-        console.warn(`Gemini TTS API key ${keyIndex + 1} failed; retrying with the next configured key.`);
-        continue;
-      }
-      throw providerError(error);
-    }
-  }
-  if (!response) {
-    throw providerError(lastError ?? new Error('Gemini text-to-speech failed without a provider response.'));
-  }
+    },
+  }).catch((error) => {
+    throw providerError(error);
+  });
 
   const audio = response.candidates?.[0]?.content?.parts
     ?.find((part) => part.inlineData?.data)?.inlineData;

@@ -45,8 +45,9 @@ Dashboard ka **Create & Publish Short** button connected channel ke context aur 
 
 ### 3.3 Gemini Studio
 
-- Backend Gemini API key ke zariye Gemini 3.8 Flash request karta hai.
-- Primary model quota, overload ya timeout (`429`, `503`, `504`) par Gemini 3.1 Flash-Lite par fallback hota hai.
+- Backend `GEMINI_API_KEY`, `GEMINI_API_KEY_2`, aur comma-separated `GEMINI_API_KEYS` se deduplicated key pool banata hai aur requests ko round-robin karta hai.
+- Script generation ka text-only fallback chain `gemini-2.5-flash`, `gemini-2.0-flash`, `gemini-1.5-flash`, aur `gemini-1.5-pro` hai; quota/key failures par key rotate hoti hai. Har request par adhiktam teen retries hote hain.
+- Chat apne configured text models par bounded fallback karta hai. TTS sirf `GEMINI_TTS_MODEL` audio request karta hai aur failure par text model par switch kiye bina API keys rotate karta hai.
 - Chat, response regenerate, copy aur local like/dislike controls available hain.
 - Chat history server ya MongoDB mein persist nahi hoti.
 
@@ -170,7 +171,7 @@ Secrets ko `.env` mein backend par configure karein. `.env.example` variable nam
 Important settings:
 
 - `MONGODB_URI`, `PORT`, `FRONTEND_URL`
-- `GEMINI_API_KEY`, `GEMINI_API_KEY_2`, `GEMINI_TTS_MODEL`, `GEMINI_TTS_VOICE`
+- `GEMINI_API_KEY`, `GEMINI_API_KEY_2`, `GEMINI_API_KEYS`, `GEMINI_TTS_MODEL`, `GEMINI_TTS_VOICE`
 - `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REDIRECT_URI`
 - `OAUTH_STATE_SECRET`, `YOUTUBE_TOKEN_ENCRYPTION_KEY`
 - `AUTOMATION_CRON`, `AUTOMATION_START_HOUR`, `AUTOMATION_TIMEZONE`
