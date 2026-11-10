@@ -2,6 +2,7 @@ import { Router } from 'express';
 import BrainMemory from '../models/BrainMemory.js';
 import { publishAutomatedShort } from '../services/automationService.js';
 import { claimChannelLease, releaseChannelLease } from '../services/automationLockService.js';
+import { markManualPublishAsScheduledSuccess } from '../services/automationScheduleStateService.js';
 import { generateAutomatedShort, generateChatResponse } from '../services/geminiService.js';
 import { fetchChannelSummary } from '../services/youtubeService.js';
 
@@ -84,6 +85,14 @@ router.post('/publish', asyncHandler(async (req, res) => {
 
   try {
     const result = await publishAutomatedShort(normalizedChannelId, { privacyStatus: 'public' });
+    try {
+      const completedScheduledCycle = await markManualPublishAsScheduledSuccess(normalizedChannelId);
+      if (completedScheduledCycle) {
+        console.log(`[automation] Manual upload completed the pending scheduled cycle for channel ${normalizedChannelId}.`);
+      }
+    } catch (error) {
+      console.error(`[automation] Manual upload succeeded, but the scheduled cycle could not be marked complete for channel ${normalizedChannelId}:`, error);
+    }
     return res.json(result);
   } finally {
     try {

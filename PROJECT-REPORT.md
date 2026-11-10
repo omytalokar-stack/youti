@@ -93,6 +93,7 @@ Current renderer Gemini se har scene ka alag AI video/image nahi banata. Visual 
 - Default daily start: `16:00` in `Asia/Kolkata`.
 - Scheduler `*/30 * * * *` par due channels check karta hai; failed generation/upload par har 30 minute retry karta hai aur MongoDB state mein successful daily cycle save karta hai.
 - Retry success hone par us din ke baaki retries rukte hain; agla scheduled cycle agle din `16:00` par shuru hota hai.
+- Daily start time ke baad successful dashboard manual upload pending scheduled cycle ko complete mark karta hai; start time se pehle manual upload us din ke scheduled run ko cancel nahi karta.
 - Schedule har connected channel par publishing pipeline chalane ki koshish karta hai.
 - Sirf upload scope wale channels publish ho sakte hain; scheduler per-channel failure log karke agle channel par aage badhta hai.
 - MongoDB lease multiple worker instances ke beech same channel ke overlapping upload ko rokne mein madad karta hai.
@@ -126,6 +127,7 @@ Current renderer Gemini se har scene ka alag AI video/image nahi banata. Visual 
 - `services/automationService.js` — credential checks se lekar generation, render, upload aur video log tak orchestration.
 - `services/automationLockService.js` — manual aur scheduled publish jobs ke liye shared MongoDB lease.
 - `services/schedulerService.js` — cron schedule aur per-channel automated publishing.
+- `services/automationScheduleStateService.js` — daily cycle date calculation aur manual/scheduled success tracking.
 - `models/AutomationScheduleState.js` — retry ke beech active daily cycle aur last successful scheduled cycle.
 - `services/youtubeService.js` — OAuth, encrypted credential handling, YouTube channel, recent upload catalog/live counts aur Analytics API operations.
 - `services/youtubeUploadService.js` — YouTube upload permission, metadata, privacy aur MP4 upload.

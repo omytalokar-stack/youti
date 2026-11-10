@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import AutomationScheduleState from '../models/AutomationScheduleState.js';
 import YouTubeCredential from '../models/YouTubeCredential.js';
 import { publishAutomatedShort } from './automationService.js';
+import { getScheduleCycleDate, markScheduleCycleSuccessful } from './automationScheduleStateService.js';
 import { claimChannelLease, releaseChannelLease } from './automationLockService.js';
 
 const DEFAULT_SCHEDULE = '*/30 * * * *';
@@ -9,39 +10,6 @@ const DEFAULT_TIMEZONE = 'Asia/Kolkata';
 const DEFAULT_START_HOUR = 16;
 let scheduledTask = null;
 let scheduleInProgress = false;
-
-function localDateParts(date, timezone) {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(date);
-  return Object.fromEntries(parts.map(({ type, value }) => [type, value]));
-}
-
-function getLocalDate({ year, month, day }) {
-  return `${year}-${month}-${day}`;
-}
-
-function getPreviousLocalDate({ year, month, day }) {
-  const previous = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day) - 1));
-  return `${previous.getUTCFullYear()}-${String(previous.getUTCMonth() + 1).padStart(2, '0')}-${String(previous.getUTCDate()).padStart(2, '0')}`;
-}
-
-export function getScheduleCycleDate(now, timezone, startHour, activeCycleDate, lastSuccessfulCycleDate) {
-  const parts = localDateParts(now, timezone);
-  const today = getLocalDate(parts);
-  if (Number(parts.hour) >= startHour) {
-    return today;
-  }
-  if (activeCycleDate && activeCycleDate !== lastSuccessfulCycleDate) {
-    return activeCycleDate;
-  }
-  return null;
-}
 
 async function runScheduledAutomation(timezone, startHour) {
   if (scheduleInProgress) {
@@ -70,14 +38,13 @@ async function runScheduledAutomation(timezone, startHour) {
         if (!cycleDate || scheduleState?.lastSuccessfulCycleDate === cycleDate) {
           continue;
         }
-        scheduleState = await AutomationScheduleState.findOneAndUpdate(
+        await AutomationScheduleState.findOneAndUpdate(
           { channelId },
           { $set: { activeCycleDate: cycleDate } },
           { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true },
         );
         const result = await publishAutomatedShort(channelId);
-        scheduleState.lastSuccessfulCycleDate = cycleDate;
-        await scheduleState.save();
+        await markScheduleCycleSuccessful(channelId, cycleDate);
         console.log(`[automation] Published ${result.url} (${result.privacyStatus}) for channel ${channelId}.`);
       } catch (error) {
         console.error(`[automation] Publishing failed for channel ${channelId}:`, error);
