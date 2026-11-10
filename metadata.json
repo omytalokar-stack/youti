@@ -1,0 +1,6 @@
+{
+  "name": "Dimag AI - Autonomous YouTube Engine & Gemini Studio",
+  "description": "Autonomous YouTube channel intelligence dashboard, Gemini Studio clone, video analytics with subscriber breakdown, and Dimag self-correction engine.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
