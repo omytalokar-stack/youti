@@ -11,6 +11,7 @@ import { generateVoiceover } from './ttsService.js';
 import { fetchChannelSummary } from './youtubeService.js';
 import { uploadVideoToYouTube } from './youtubeUploadService.js';
 import { runPublishStage } from './publishStage.js';
+import { fetchRecentVideoTopics } from './scriptService.js';
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TEMP_DIRECTORY = path.join(PROJECT_ROOT, 'temp');
@@ -47,8 +48,10 @@ export async function publishAutomatedShort(channelId, { privacyStatus } = {}) {
       { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true },
     ));
     const channel = await runPublishStage('loading-youtube-channel', () => fetchChannelSummary(channelId));
+    const recentVideos = await runPublishStage('loading-recent-video-history', () =>
+      fetchRecentVideoTopics(channelId));
     const generated = await runPublishStage('generating-short-script', () =>
-      generateAutomatedShort(memory, channel));
+      generateAutomatedShort(memory, channel, recentVideos));
     await runPublishStage('validating-generated-metadata', async () => {
       if (!generated.title.trim() || generated.title.length > 100 || generated.description.length > 5000) {
         throw new Error('Gemini generated YouTube metadata outside the supported title or description length.');

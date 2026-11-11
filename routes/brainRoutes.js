@@ -4,6 +4,7 @@ import { publishAutomatedShort } from '../services/automationService.js';
 import { claimChannelLease, releaseChannelLease } from '../services/automationLockService.js';
 import { markManualPublishAsScheduledSuccess } from '../services/automationScheduleStateService.js';
 import { generateAutomatedShort, generateChatResponse } from '../services/geminiService.js';
+import { fetchRecentVideoTopics } from '../services/scriptService.js';
 import { fetchChannelSummary } from '../services/youtubeService.js';
 
 const router = Router();
@@ -65,7 +66,8 @@ router.post('/cycle', asyncHandler(async (req, res) => {
     { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true },
   );
   const channel = await fetchChannelSummary(channelId.trim());
-  const generated = await generateAutomatedShort(memory, channel);
+  const recentVideos = await fetchRecentVideoTopics(channelId.trim());
+  const generated = await generateAutomatedShort(memory, channel, recentVideos);
   memory.lastAutonomousRun = new Date();
   await memory.save();
   return res.json({ generated, memory });

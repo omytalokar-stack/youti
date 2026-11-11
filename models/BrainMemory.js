@@ -28,6 +28,7 @@ const brainMemorySchema = new mongoose.Schema(
     provenTactics: { type: [provenTacticSchema], default: [] },
     mistakeLogs: { type: [mistakeLogSchema], default: [] },
     lastAutonomousRun: { type: Date, default: null },
+    lastFallbackScriptIndex: { type: Number, default: -1, min: -1 },
   },
   { timestamps: true },
 );

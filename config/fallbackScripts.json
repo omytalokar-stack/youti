@@ -1,0 +1,142 @@
+[
+  {
+    "hook": "Space mein khamoshi ka ek solid reason hai.",
+    "script": "Space vacuum hai, isliye sound waves travel nahi kar sakti. Explosion dikhega, par sunai nahi dega.",
+    "title": "Space Mein Explosion Sunai Kyun Nahi Deta?",
+    "description": "Space ke vacuum mein sound travel nahi kar sakta.",
+    "tags": ["space", "science", "facts"]
+  },
+  {
+    "hook": "Venus ka din uske saal se bhi lamba hai.",
+    "script": "Venus apni dhuri par ek chakkar 243 Earth days mein lagata hai, par uska saal sirf 225 din ka hai.",
+    "title": "Venus Ka Din Saal Se Lamba Hai",
+    "description": "Venus ki rotation aur orbit ka surprising comparison.",
+    "tags": ["venus", "space", "science"]
+  },
+  {
+    "hook": "Hamari Moon har saal thodi door ja rahi hai.",
+    "script": "Moon Earth se har saal lagbhag 3.8 centimeter door ja rahi hai, laser measurements se ye pata chala.",
+    "title": "Moon Dheere Dheere Earth Se Door Ja Rahi Hai",
+    "description": "Laser measurements ne Moon ki gradual recession dikhayi.",
+    "tags": ["moon", "space", "science"]
+  },
+  {
+    "hook": "Black hole ke paas ek one-way boundary hoti hai.",
+    "script": "Black hole ke event horizon ke andar se light bhi bahar nahi nikal sakti, isliye woh boundary one-way hai.",
+    "title": "Black Hole Ka One-Way Point",
+    "description": "Event horizon ke baare mein ek basic space fact.",
+    "tags": ["blackhole", "space", "physics"]
+  },
+  {
+    "hook": "Neutron star ka matter unbelievably dense hota hai.",
+    "script": "Neutron star ka matter itna dense hota hai ki ek chammach ka mass arbon ton ke aas paas ho sakta hai.",
+    "title": "Neutron Star Ka Ek Chammach Kitna Bhaari?",
+    "description": "Neutron stars ki extraordinary density ka scale.",
+    "tags": ["neutronstar", "space", "science"]
+  },
+  {
+    "hook": "Sunlight bhi Earth tak pahunchne mein time leti hai.",
+    "script": "Sunlight ko Sun se Earth tak aane mein kareeb aath minute bees second lagte hain.",
+    "title": "Sunlight Earth Tak Kab Pahunchti Hai?",
+    "description": "Sun se aane wali roshni ka safar.",
+    "tags": ["sun", "space", "science"]
+  },
+  {
+    "hook": "Mars par sunset ka rang Earth se alag dikhta hai.",
+    "script": "Mars ke atmosphere mein dhool blue light ko sunset ke paas zyada scatter karti hai, isliye aasman neela sa chamak sakta hai.",
+    "title": "Mars Par Blue Sunset Kyun Dikhta Hai?",
+    "description": "Mars ke dhool bhare atmosphere ka optical effect.",
+    "tags": ["mars", "space", "science"]
+  },
+  {
+    "hook": "Aapki memory video recording jaisi nahi hoti.",
+    "script": "Jab hum koi memory yaad karte hain, dimaag usse reconstruct karta hai; har baar details badal sakti hain.",
+    "title": "Dimaag Memories Ko Replay Nahi Karta",
+    "description": "Human memory reconstruction ke baare mein ek psychology fact.",
+    "tags": ["psychology", "brain", "memory"]
+  },
+  {
+    "hook": "Neend ke dauraan dimaag memories ko organize karta hai.",
+    "script": "Sleep ke dauraan dimaag naye experiences ko process karta hai, aur memory consolidation mein madad milti hai.",
+    "title": "Neend Memories Ko Kaise Sambhalti Hai?",
+    "description": "Sleep aur memory consolidation ka connection.",
+    "tags": ["psychology", "sleep", "brain"]
+  },
+  {
+    "hook": "Octopus ke teen hearts hote hain.",
+    "script": "Octopus ke teen hearts hote hain; do gills tak blood bhejte hain aur ek body ke baaki hisson tak.",
+    "title": "Octopus Ke Teen Hearts Kaise Kaam Karte Hain?",
+    "description": "Octopus ke unusual circulatory system ka fact.",
+    "tags": ["octopus", "animals", "nature"]
+  },
+  {
+    "hook": "Wombat ka poop cube jaisa hota hai.",
+    "script": "Wombat ke intestines ki uneven elasticity poop ko cube shape deti hai, jisse woh jagah par roll nahi karta.",
+    "title": "Wombat Cube-Shaped Poop Kyun Karta Hai?",
+    "description": "Wombat anatomy se juda ek bizarre nature fact.",
+    "tags": ["wombat", "animals", "nature"]
+  },
+  {
+    "hook": "Sharks ka evolutionary past trees se bhi purana hai.",
+    "script": "Sharks ke ancestors lagbhag 400 million saal pehle the, jabki pehle forests baad mein aaye.",
+    "title": "Sharks Trees Se Bhi Purane Hain",
+    "description": "Sharks aur forests ke evolutionary timelines ka comparison.",
+    "tags": ["sharks", "evolution", "nature"]
+  },
+  {
+    "hook": "Axolotl apne limbs dobara grow kar sakta hai.",
+    "script": "Axolotl apne limbs regenerate kar sakta hai, aur scientists is ability ko samajhne ke liye study karte hain.",
+    "title": "Axolotl Ki Limb Regeneration",
+    "description": "Axolotl ki remarkable regeneration ability.",
+    "tags": ["axolotl", "animals", "science"]
+  },
+  {
+    "hook": "Lightning ka channel Sun ki surface se zyada garam hota hai.",
+    "script": "Lightning ke channel ka temperature kuch pal ke liye Sun ki surface se bhi zyada ho sakta hai.",
+    "title": "Lightning Sun Se Zyada Garam Ho Sakti Hai",
+    "description": "Lightning ke extreme temperature ka science fact.",
+    "tags": ["lightning", "weather", "science"]
+  },
+  {
+    "hook": "Paani ek hi waqt par ubal bhi sakta hai aur jam bhi.",
+    "script": "Paani ke triple point par sahi pressure aur temperature mein ice, liquid water aur vapor saath exist kar sakte hain.",
+    "title": "Paani Ke Teen States Ek Saath",
+    "description": "Water ke triple point ka unusual physics fact.",
+    "tags": ["water", "physics", "science"]
+  },
+  {
+    "hook": "Cleopatra pyramids se zyada Moon landing ke kareeb thi.",
+    "script": "Cleopatra ka waqt Great Pyramid banne ke muqable Moon landing ke zyada kareeb tha; history ka scale socho.",
+    "title": "Cleopatra Aur Moon Landing Ka Surprising Timeline",
+    "description": "Ancient Egyptian history ka surprising timeline comparison.",
+    "tags": ["history", "cleopatra", "pyramids"]
+  },
+  {
+    "hook": "Oxford mein teaching Aztec empire se pehle shuru hui thi.",
+    "script": "Oxford mein teaching ke records 1096 tak jaate hain, jabki Aztec empire kai sadiyon baad bana.",
+    "title": "Oxford Aztec Empire Se Purana Hai",
+    "description": "Oxford aur Aztec empire ke timelines ka comparison.",
+    "tags": ["history", "oxford", "aztec"]
+  },
+  {
+    "hook": "Purane Greeks ne ek complex gear computer banaya tha.",
+    "script": "Antikythera mechanism gears se celestial cycles track karta tha, aur ise ancient Greek analog computer kaha jata hai.",
+    "title": "Antikythera: Ancient Greek Gear Computer",
+    "description": "Antikythera mechanism ka engineering aur history fact.",
+    "tags": ["history", "technology", "ancient"]
+  },
+  {
+    "hook": "Deep ocean ke kuch ecosystems sunlight ke bina chalte hain.",
+    "script": "Hydrothermal vents ke paas microbes chemical energy use karte hain, aur wahi ecosystem ki food chain ka base ban sakti hai.",
+    "title": "Samundar Ki Gehrai Mein Sunlight Ke Bina Life",
+    "description": "Hydrothermal vent ecosystems mein chemosynthesis.",
+    "tags": ["ocean", "deepsea", "nature"]
+  },
+  {
+    "hook": "Mariana Trench ke neeche pressure bahut hi zyada hota hai.",
+    "script": "Mariana Trench ke deepest area mein pressure surface ke muqable lagbhag ek hazaar guna hota hai.",
+    "title": "Mariana Trench Ka Crushing Pressure",
+    "description": "Deep ocean pressure ka scale samajhiye.",
+    "tags": ["ocean", "mariana", "science"]
+  }
+]
