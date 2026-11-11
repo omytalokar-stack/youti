@@ -10,6 +10,7 @@ import { assertFfmpegAvailable, renderShort } from './renderService.js';
 import { generateVoiceover } from './ttsService.js';
 import { fetchChannelSummary } from './youtubeService.js';
 import { uploadVideoToYouTube } from './youtubeUploadService.js';
+import { runPublishStage } from './publishStage.js';
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TEMP_DIRECTORY = path.join(PROJECT_ROOT, 'temp');
@@ -17,7 +18,8 @@ const RENDERS_DIRECTORY = path.join(PROJECT_ROOT, 'renders');
 const UPLOAD_SCOPE = 'https://www.googleapis.com/auth/youtube.upload';
 
 export async function publishAutomatedShort(channelId, { privacyStatus } = {}) {
-  const credential = await YouTubeCredential.findOne({ channelId }).lean();
+  const credential = await runPublishStage('loading-channel-credentials', () =>
+    YouTubeCredential.findOne({ channelId }).lean());
   if (!credential) {
     const error = new Error('YouTube channel is not connected.');
     error.statusCode = 401;
@@ -29,38 +31,44 @@ export async function publishAutomatedShort(channelId, { privacyStatus } = {}) {
     throw error;
   }
 
-  await mkdir(TEMP_DIRECTORY, { recursive: true });
-  await mkdir(RENDERS_DIRECTORY, { recursive: true });
+  await runPublishStage('preparing-workspace', async () => {
+    await mkdir(TEMP_DIRECTORY, { recursive: true });
+    await mkdir(RENDERS_DIRECTORY, { recursive: true });
+  });
   const voiceoverPath = path.join(TEMP_DIRECTORY, `voiceover-${randomUUID()}.mp3`);
   const renderPath = path.join(RENDERS_DIRECTORY, 'short_output.mp4');
 
+  let pipelineError;
   try {
-    await assertFfmpegAvailable();
-    const memory = await BrainMemory.findOneAndUpdate(
+    await runPublishStage('checking-video-tools', () => assertFfmpegAvailable());
+    const memory = await runPublishStage('loading-channel-memory', () => BrainMemory.findOneAndUpdate(
       { channelId },
       { $setOnInsert: { channelId } },
       { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true },
-    );
-    const channel = await fetchChannelSummary(channelId);
-    const generated = await generateAutomatedShort(memory, channel);
-    if (!generated.title.trim() || generated.title.length > 100 || generated.description.length > 5000) {
-      throw new Error('Gemini generated YouTube metadata outside the supported title or description length.');
-    }
-    await generateVoiceover(generated.script, voiceoverPath);
-    const rendered = await renderShort({
+    ));
+    const channel = await runPublishStage('loading-youtube-channel', () => fetchChannelSummary(channelId));
+    const generated = await runPublishStage('generating-short-script', () =>
+      generateAutomatedShort(memory, channel));
+    await runPublishStage('validating-generated-metadata', async () => {
+      if (!generated.title.trim() || generated.title.length > 100 || generated.description.length > 5000) {
+        throw new Error('Gemini generated YouTube metadata outside the supported title or description length.');
+      }
+    });
+    await runPublishStage('generating-voiceover', () => generateVoiceover(generated.script, voiceoverPath));
+    const rendered = await runPublishStage('rendering-video', () => renderShort({
       voiceoverPath,
       hook: generated.hook,
       subtitleBeats: generated.subtitleBeats,
       outputPath: renderPath,
-    });
-    const uploaded = await uploadVideoToYouTube(channelId, {
+    }));
+    const uploaded = await runPublishStage('uploading-to-youtube', () => uploadVideoToYouTube(channelId, {
       filePath: rendered.outputPath,
       title: generated.title,
       description: generated.description,
       tags: generated.tags,
-    }, { privacyStatus });
+    }, { privacyStatus }));
 
-    await VideoLog.findOneAndUpdate(
+    await runPublishStage('saving-upload-record', () => VideoLog.findOneAndUpdate(
       { channelId, videoId: uploaded.videoId },
       {
         $set: {
@@ -74,9 +82,9 @@ export async function publishAutomatedShort(channelId, { privacyStatus } = {}) {
         },
       },
       { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true },
-    );
+    ));
     memory.lastAutonomousRun = new Date();
-    await memory.save();
+    await runPublishStage('saving-channel-memory', () => memory.save());
 
     return {
       channelId,
@@ -87,7 +95,19 @@ export async function publishAutomatedShort(channelId, { privacyStatus } = {}) {
       durationSeconds: rendered.durationSeconds,
       uploadedAt: memory.lastAutonomousRun.toISOString(),
     };
+  } catch (error) {
+    pipelineError = error;
+    throw error;
   } finally {
-    await rm(voiceoverPath, { force: true });
+    try {
+      await runPublishStage('cleaning-temporary-files', () => rm(voiceoverPath, { force: true }));
+    } catch (cleanupError) {
+      if (pipelineError) {
+        console.error('[publish] temporary-file cleanup also failed after the pipeline error.');
+        console.error(cleanupError);
+      } else {
+        throw cleanupError;
+      }
+    }
   }
 }

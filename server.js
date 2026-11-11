@@ -38,6 +38,9 @@ app.use((error, req, res, next) => {
   }
   const statusCode = Number.isInteger(error.statusCode) ? error.statusCode : 500;
   if (statusCode >= 500) {
+    if (error.publishStage) {
+      console.error(`[publish] failed during ${error.publishStage}.`);
+    }
     console.error(error);
   }
   return res.status(statusCode).json({

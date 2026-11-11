@@ -22,7 +22,7 @@ Set `FRONTEND_URL` to the frontend origin and set `YOUTUBE_REDIRECT_URI` to the 
 
 ## Automatic video publishing
 
-- The backend generates a short Hindi/Hinglish script and timestamped subtitle beats with Gemini, generates Hindi speech with Gemini TTS, renders a vertical MP4, and uploads it to the authorized channel.
+- The backend generates a short Hindi/Hinglish script and timestamped subtitle beats with Gemini, generates Hindi speech with Gemini TTS (falling back to Microsoft Edge TTS `hi-IN-MadhurNeural` for Gemini quota/request errors), renders a vertical MP4, and uploads it to the authorized channel.
 - Spoken text is sanitized before synthesis; render output includes a neon-yellow hook card for the first 0.5 seconds, subtle background zoom, highlighted subtitles, and optional ducked BGM/zero-time hook SFX. Upload metadata appends `#Shorts` to the title and standard niche hashtags to the description.
 - Clicking **Create & Publish Short** in the dashboard or Agent Brain chooses a channel-relevant topic, generates the script, voiceover, and video, then immediately uploads it as **public**. Check the generated content and channel before clicking; this is a real public YouTube upload.
 - By default, the scheduler starts one daily public-publishing cycle at 4:00 PM in `Asia/Kolkata`. If generation or upload fails, it retries every 30 minutes until that cycle succeeds; after success it waits until 4:00 PM the next day. This is a real automatic public-publishing schedule. Set `AUTOMATION_CRON=disabled` to turn it off.
@@ -38,7 +38,7 @@ Set `FRONTEND_URL` to the frontend origin and set `YOUTUBE_REDIRECT_URI` to the 
 - `fluent-ffmpeg` does not bundle FFmpeg. Set `FFMPEG_PATH` and `FFPROBE_PATH` if executables are not on `PATH`; the renderer checks for the binary and the `subtitles` filter before processing.
 - Generated voiceover and subtitle temporaries are removed after the run. The latest rendered file is stored at `renders/short_output.mp4`; it is not exposed as a public download route.
 - The backend must stay running at the scheduled time. Serverless or sleeping hosts need an external scheduler/always-on worker instead of an in-process cron.
-- Gemini TTS uses the configured Gemini API key and quota. The generated audio is converted to MP3 using the backend's FFmpeg installation.
+- Gemini TTS uses the configured Gemini API key and quota. On Gemini 400/429 or quota-exceeded errors, voiceover generation falls back to Microsoft Edge TTS; both providers produce MP3 for the renderer. Edge TTS requires an internet connection and can fail independently if Microsoft's service is unavailable.
 - YouTube may restrict public uploads from API projects that have not completed YouTube's required API audit. The API's accepted privacy status does not guarantee public visibility for an unaudited project.
 
 ## Google OAuth and analytics troubleshooting
@@ -46,6 +46,9 @@ Set `FRONTEND_URL` to the frontend origin and set `YOUTUBE_REDIRECT_URI` to the 
 - In Google Cloud Console, enable **YouTube Data API v3** and **YouTube Analytics API** in the same project as the OAuth client. If the Analytics API was just enabled, wait a few minutes and refresh analytics.
 - If the OAuth consent screen is in **Testing**, add each Google account that will connect a channel under **Google Auth Platform → Audience → Test users**. Otherwise Google can show `access_denied` because the app has not granted that account access.
 - The authorized redirect URI must exactly match `YOUTUBE_REDIRECT_URI`, including protocol, host, port, and path.
+- Publish failures now identify the failed pipeline stage in the UI and backend logs (for example, `generating-voiceover` or `uploading-to-youtube`). Use the backend log entry at the same time as the failed request to diagnose provider or infrastructure details.
+- Gemini TTS models do not support the developer instruction used by text models; voiceover requests send only the sanitized script as spoken text. Gemini 400/429 and quota-exceeded errors use the Microsoft Edge TTS fallback; if both services fail, the backend logs both errors.
+- If the UI says the failure happened while `saving-upload-record`, `saving-channel-memory`, or `cleaning-temporary-files`, check the connected YouTube channel before retrying; YouTube may already have accepted the video.
 
 ## API
 
