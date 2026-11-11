@@ -16,7 +16,7 @@ const TEMP_DIRECTORY = path.join(PROJECT_ROOT, 'temp');
 const MAX_DURATION_SECONDS = 20;
 const VIDEO_WIDTH = 1080;
 const VIDEO_HEIGHT = 1920;
-const FALLBACK_BACKGROUND = "color=c=black:s=540x960:r=30,format=rgb24,geq=r='10+25*Y/960':g='12+12*Y/960':b='24+36*Y/960',noise=alls=3:allf=t+u,vignette=PI/4,format=yuv420p";
+const FALLBACK_BACKGROUND = "color=c=0x202044:s=540x960:r=30,format=rgb24,geq=r='70+38*sin(X/95+T*1.3)+18*sin(Y/130-T*0.7)':g='65+28*sin(X/145-T*0.9)+16*sin(Y/105+T*1.1)':b='110+48*sin(X/165+T*0.8)+22*sin(Y/115-T*1.2)',noise=alls=4:allf=t+u,vignette=PI/4,format=yuv420p";
 const executeFile = promisify(execFile);
 
 if (process.env.FFMPEG_PATH) {
@@ -62,14 +62,14 @@ async function findBoldFont() {
   return null;
 }
 
-async function createFallbackBackground(outputPath) {
+async function createFallbackBackground(outputPath, durationSeconds) {
   const ffmpegPath = process.env.FFMPEG_PATH || (process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
   try {
     await executeFile(ffmpegPath, [
       '-y',
       '-f', 'lavfi',
       '-i', FALLBACK_BACKGROUND,
-      '-t', '4',
+      '-t', String(durationSeconds),
       '-an',
       '-c:v', 'libx264',
       '-threads', '1',
@@ -94,7 +94,7 @@ async function createFallbackAudio(outputPath, type) {
     '[0:a]volume=0.22[tone1]',
     '[1:a]volume=0.12[tone2]',
     '[2:a]volume=0.05[tone3]',
-    '[tone1][tone2][tone3]amix=inputs=3:duration=longest:normalize=0,lowpass=f=220,afade=t=in:st=0:d=1,afade=t=out:st=19:d=1[aout]',
+    '[tone1][tone2][tone3]amix=inputs=3:duration=longest:normalize=0,lowpass=f=220,volume=12,afade=t=in:st=0:d=1,afade=t=out:st=19:d=1[aout]',
   ].join(';');
   const effectFilter = [
     '[0:a]highpass=f=400,lowpass=f=8000,afade=t=in:st=0:d=0.08,afade=t=out:st=0.08:d=1.12,volume=2[noise]',
@@ -336,7 +336,7 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
       : null;
     if (!background) {
       fallbackBackgroundPath = path.join(TEMP_DIRECTORY, `gradient-${randomUUID()}.mp4`);
-      await createFallbackBackground(fallbackBackgroundPath);
+      await createFallbackBackground(fallbackBackgroundPath, voiceDurationSeconds);
       background = fallbackBackgroundPath;
     }
     const allAudioFiles = [...soundEffects, ...audioTracks];
@@ -393,7 +393,7 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
     };
     const audioFilters = [
       '[1:a]aresample=44100,aformat=channel_layouts=mono,volume=1[voice]',
-      '[2:a]aresample=44100,aformat=channel_layouts=mono,volume=0.10[bgm]',
+      '[2:a]aresample=44100,aformat=channel_layouts=mono,volume=0.12[bgm]',
       '[3:a]aresample=44100,aformat=channel_layouts=mono,atrim=duration=1.5,asetpts=PTS-STARTPTS,volume=0.85[sfx]',
       '[voice][bgm][sfx]amix=inputs=3:duration=first:dropout_transition=2:normalize=0,alimiter=limit=0.95[aout]',
     ];
@@ -412,7 +412,7 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
           '-filter_complex_threads', '1',
           '-map', '[vout]',
           '-map', '[aout]',
-          '-t', String(MAX_DURATION_SECONDS),
+          '-t', String(voiceDurationSeconds),
           '-shortest',
           '-r', '30',
           '-c:v', 'libx264',
@@ -455,8 +455,10 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
       throw new Error('FFmpeg completed without creating a valid video file.');
     }
     const durationSeconds = await probeDuration(outputPath);
-    if (durationSeconds > MAX_DURATION_SECONDS + 0.25) {
-      throw new Error(`Rendered video exceeds the ${MAX_DURATION_SECONDS}-second duration limit.`);
+    if (Math.abs(durationSeconds - voiceDurationSeconds) > 0.3) {
+      throw new Error(
+        `Rendered video duration (${durationSeconds.toFixed(2)}s) differs from voiceover duration (${voiceDurationSeconds.toFixed(2)}s) by more than 0.3 seconds.`,
+      );
     }
     return { outputPath, durationSeconds };
   } finally {
