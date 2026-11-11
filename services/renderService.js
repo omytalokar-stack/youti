@@ -34,6 +34,34 @@ async function listFiles(directory, extensions) {
     .map((entry) => path.join(directory, entry.name));
 }
 
+async function findBoldFont() {
+  const assetFonts = await listFiles(FONT_DIRECTORY, new Set(['.ttf', '.otf', '.ttc']));
+  const boldAsset = assetFonts.find((filePath) => /(?:bold|heavy|black|semibold)/i.test(path.basename(filePath)));
+  if (boldAsset) {
+    return boldAsset;
+  }
+
+  const systemFonts = process.platform === 'win32'
+    ? [path.join(process.env.WINDIR || 'C:\\Windows', 'Fonts', 'arialbd.ttf')]
+    : [
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+        '/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf',
+        '/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf',
+      ];
+  for (const fontPath of systemFonts) {
+    try {
+      if ((await stat(fontPath)).isFile()) {
+        return fontPath;
+      }
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+  }
+  return null;
+}
+
 async function createFallbackBackground(outputPath) {
   const ffmpegPath = process.env.FFMPEG_PATH || (process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
   try {
@@ -51,6 +79,46 @@ async function createFallbackBackground(outputPath) {
     ], { windowsHide: true, maxBuffer: 8 * 1024 * 1024 });
   } catch (error) {
     throw new Error(`Could not create fallback gradient background: ${error.message}`, { cause: error });
+  }
+}
+
+async function createFallbackAudio(outputPath, type) {
+  const ffmpegPath = process.env.FFMPEG_PATH || (process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
+  const musicFilter = [
+    '[0:a]volume=0.22[tone1]',
+    '[1:a]volume=0.12[tone2]',
+    '[2:a]volume=0.05[tone3]',
+    '[tone1][tone2][tone3]amix=inputs=3:duration=longest:normalize=0,lowpass=f=220,afade=t=in:st=0:d=1,afade=t=out:st=19:d=1[aout]',
+  ].join(';');
+  const effectFilter = [
+    '[0:a]highpass=f=400,lowpass=f=8000,afade=t=in:st=0:d=0.08,afade=t=out:st=0.08:d=1.12,volume=2[noise]',
+    '[1:a]lowpass=f=160,afade=t=out:st=0:d=0.35,volume=1.4[thump]',
+    '[noise][thump]amix=inputs=2:duration=longest:normalize=0[aout]',
+  ].join(';');
+  const args = type === 'music'
+    ? [
+        '-y',
+        '-f', 'lavfi', '-i', 'sine=frequency=55:sample_rate=44100:duration=20',
+        '-f', 'lavfi', '-i', 'sine=frequency=82.41:sample_rate=44100:duration=20',
+        '-f', 'lavfi', '-i', 'sine=frequency=110:sample_rate=44100:duration=20',
+        '-filter_complex', musicFilter,
+      ]
+    : [
+        '-y',
+        '-f', 'lavfi', '-i', 'anoisesrc=color=white:sample_rate=44100:duration=1.2',
+        '-f', 'lavfi', '-i', 'sine=frequency=90:sample_rate=44100:duration=0.35',
+        '-filter_complex', effectFilter,
+      ];
+  try {
+    await executeFile(ffmpegPath, [
+      ...args,
+      '-map', '[aout]',
+      '-c:a', 'libmp3lame',
+      '-b:a', '96k',
+      outputPath,
+    ], { windowsHide: true, maxBuffer: 8 * 1024 * 1024 });
+  } catch (error) {
+    throw new Error(`Could not create fallback ${type === 'music' ? 'background music' : 'hook sound effect'}: ${error.message}`, { cause: error });
   }
 }
 
@@ -80,8 +148,27 @@ function formatAssTime(value) {
   return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(remainder).padStart(2, '0')}`;
 }
 
-function highlightBeat(text, highlightedWord, index) {
-  const escapedText = escapeAssText(text.toUpperCase());
+function wrapSubtitleText(text) {
+  const maxLineLength = 18;
+  const words = text.trim().split(/\s+/);
+  const lines = [];
+  let line = '';
+  for (const word of words) {
+    if (line && `${line} ${word}`.length > maxLineLength) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = line ? `${line} ${word}` : word;
+    }
+  }
+  if (line) {
+    lines.push(line);
+  }
+  return lines.join('\n');
+}
+
+function highlightBeat(text, highlightedWord) {
+  const escapedText = escapeAssText(wrapSubtitleText(text).toUpperCase());
   const escapedWord = escapeAssText(highlightedWord.toUpperCase());
   const wordIndex = escapedText.toUpperCase().indexOf(escapedWord.toUpperCase());
   if (wordIndex < 0) {
@@ -91,21 +178,40 @@ function highlightBeat(text, highlightedWord, index) {
   const before = escapedText.slice(0, wordIndex);
   const word = escapedText.slice(wordIndex, wordIndex + escapedWord.length);
   const after = escapedText.slice(wordIndex + escapedWord.length);
-  const highlightColor = index % 2 === 0 ? '&H0000E6FF&' : '&H0066FF00&';
-  return `${before}{\\c${highlightColor}\\b1}${word}{\\rDefault}${after}`;
+  return `${before}{\\c&H0000E6FF&\\b1}${word}{\\rDefault}${after}`;
 }
 
 function splitHookLines(hook) {
-  const words = hook.trim().split(/\s+/);
-  if (words.length < 2 || hook.length <= 28) {
-    return hook;
+  const normalized = hook
+    .replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLocaleUpperCase();
+  const characters = Array.from(normalized);
+  const concise = characters.length > 40
+    ? `${characters.slice(0, 37).join('').trimEnd()}...`
+    : normalized;
+  const words = concise.split(/\s+/);
+  if (words.length < 2 || concise.length <= 20) {
+    return concise;
   }
 
-  const midpoint = Math.ceil(words.length / 2);
-  return `${words.slice(0, midpoint).join(' ')}\n${words.slice(midpoint).join(' ')}`;
+  let firstLine = '';
+  let secondLine = '';
+  for (const word of words) {
+    if (!firstLine || `${firstLine} ${word}`.length <= 17) {
+      firstLine = firstLine ? `${firstLine} ${word}` : word;
+    } else if (!secondLine || `${secondLine} ${word}`.length <= 17) {
+      secondLine = secondLine ? `${secondLine} ${word}` : word;
+    } else {
+      secondLine = `${Array.from(secondLine).slice(0, 14).join('').trimEnd()}...`;
+      break;
+    }
+  }
+  return secondLine ? `${firstLine}\n${secondLine}` : firstLine;
 }
 
-function createAssContent(subtitleBeats, hook) {
+function createAssContent(subtitleBeats) {
   const fontName = (process.env.SUBTITLE_FONT || 'Noto Sans Devanagari').replaceAll(',', '');
   const header = [
     '[Script Info]',
@@ -117,21 +223,14 @@ function createAssContent(subtitleBeats, hook) {
     '',
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
-    `Style: Default,${fontName},80,&H00FFFFFF,&H0000E6FF,&H00101010,&H64000000,-1,0,0,0,100,100,0,0,1,6,2,2,70,70,280,1`,
-    `Style: Hook,${fontName},118,&H0000E6FF,&H0000E6FF,&H00000000,&HC8000000,-1,0,0,0,100,100,1,0,3,12,0,5,60,60,0,1`,
+    `Style: Default,${fontName},82,&H00FFFFFF,&H0000E6FF,&H00101010,&H64000000,-1,0,0,0,100,100,0,0,1,6,2,2,70,70,650,1`,
     '',
     '[Events]',
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
   ];
-  const hookEvent = hook?.trim()
-    ? `Dialogue: 1,0:00:00.00,0:00:00.50,Hook,,0,0,0,,{\\an5\\pos(540,850)}${escapeAssText(splitHookLines(hook.toUpperCase()))}`
-    : null;
-  const events = subtitleBeats.map((beat, index) =>
-    `Dialogue: 0,${formatAssTime(beat.start)},${formatAssTime(beat.end)},Default,,0,0,0,,${highlightBeat(beat.text, beat.highlightedWord, index)}`,
+  const events = subtitleBeats.map((beat) =>
+    `Dialogue: 0,${formatAssTime(beat.start)},${formatAssTime(beat.end)},Default,,0,0,0,,${highlightBeat(beat.text, beat.highlightedWord)}`,
   );
-  if (hookEvent) {
-    events.unshift(hookEvent);
-  }
   return `${header.concat(events).join('\n')}\n`;
 }
 
@@ -168,8 +267,11 @@ function getFfmpegFilters() {
 export async function assertFfmpegAvailable() {
   try {
     const filters = await getFfmpegFilters();
-    if (!/^\s*[.\w]{2,3}\s+subtitles\s+V->V\b/m.test(filters)) {
-      throw new Error('The installed FFmpeg build does not include the subtitles/libass filter.');
+    if (
+      !/^\s*[.\w]{2,3}\s+subtitles\s+V->V\b/m.test(filters) ||
+      !/^\s*[.\w]{2,3}\s+drawtext\s+V->V\b/m.test(filters)
+    ) {
+      throw new Error('The installed FFmpeg build must include both the subtitles/libass and drawtext filters.');
     }
   } catch (error) {
     throw new Error(
@@ -204,9 +306,14 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
   await mkdir(path.dirname(outputPath), { recursive: true });
   const subtitlePath = path.join(TEMP_DIRECTORY, `subtitles-${randomUUID()}.ass`);
   let fallbackBackgroundPath;
+  let hookTextPath;
+  const generatedAudioPaths = [];
 
   try {
-    await writeFile(subtitlePath, createAssContent(fittedSubtitleBeats, hook), 'utf8');
+    await writeFile(subtitlePath, createAssContent(fittedSubtitleBeats), 'utf8');
+    hookTextPath = path.join(TEMP_DIRECTORY, `hook-${randomUUID()}.txt`);
+    await writeFile(hookTextPath, splitHookLines(hook?.trim() || fittedSubtitleBeats[0].text), 'utf8');
+    const boldFontPath = await findBoldFont();
     const backgrounds = await listFiles(BACKGROUND_DIRECTORY, new Set(['.mp4', '.mov', '.mkv', '.webm', '.m4v']));
     const audioExtensions = new Set(['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac']);
     const [soundEffects, audioTracks] = await Promise.all([
@@ -226,42 +333,46 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
     const backgroundMusicFiles = allAudioFiles.filter((file) =>
       musicFilePattern.test(path.basename(file)),
     );
-    const backgroundMusic = backgroundMusicFiles.length
+    let backgroundMusic = backgroundMusicFiles.length
       ? backgroundMusicFiles[Math.floor(Math.random() * backgroundMusicFiles.length)]
       : null;
-    const hookEffects = allAudioFiles.filter((file) => {
+    if (!backgroundMusic) {
+      backgroundMusic = path.join(TEMP_DIRECTORY, `fallback-bgm-${randomUUID()}.mp3`);
+      generatedAudioPaths.push(backgroundMusic);
+      await createFallbackAudio(backgroundMusic, 'music');
+    }
+    const hookEffects = soundEffects.filter((file) => {
       const name = path.basename(file);
       return /(?:whoosh|bass|thud|impact|hook)/i.test(name) || /(?:^|[-_.\s])hit(?:$|[-_.\s])/i.test(name);
     });
-    const fallbackSoundEffects = soundEffects.filter((file) => !musicFilePattern.test(path.basename(file)));
-    const soundEffect = hookEffects.length
+    let soundEffect = hookEffects.length
       ? hookEffects[Math.floor(Math.random() * hookEffects.length)]
-      : fallbackSoundEffects.length
-        ? fallbackSoundEffects[Math.floor(Math.random() * fallbackSoundEffects.length)]
+      : soundEffects.length
+        ? soundEffects[Math.floor(Math.random() * soundEffects.length)]
         : null;
+    if (!soundEffect) {
+      soundEffect = path.join(TEMP_DIRECTORY, `fallback-whoosh-${randomUUID()}.mp3`);
+      generatedAudioPaths.push(soundEffect);
+      await createFallbackAudio(soundEffect, 'effect');
+    }
     const subtitleFilter = `subtitles=filename='${escapeFilterPath(subtitlePath)}':fontsdir='${escapeFilterPath(FONT_DIRECTORY)}'`;
-    const videoFilter = `[0:v]scale=${VIDEO_WIDTH}:${VIDEO_HEIGHT}:force_original_aspect_ratio=increase,crop=${VIDEO_WIDTH}:${VIDEO_HEIGHT},fps=30,zoompan=z='min(zoom+0.0004,1.08)':d=1:s=${VIDEO_WIDTH}x${VIDEO_HEIGHT}:fps=30,${subtitleFilter}[vout]`;
+    const hookFont = boldFontPath
+      ? `fontfile='${escapeFilterPath(boldFontPath)}'`
+      : "font='Sans'";
+    const hookCardFilter = `drawbox=x=54:y=518:w=972:h=300:color=black@0.7:t=fill:enable='between(t,0,0.6)',drawtext=${hookFont}:textfile='${escapeFilterPath(hookTextPath)}':text_align=center:fontcolor=0xFFE600:fontsize=82:borderw=4:bordercolor=black:shadowcolor=black@0.85:shadowx=4:shadowy=6:x=(w-text_w)/2:y=h*0.27+(300-text_h)/2:line_spacing=12:enable='between(t,0,0.6)'`;
+    const videoFilter = `[0:v]scale=${VIDEO_WIDTH}:${VIDEO_HEIGHT}:force_original_aspect_ratio=increase,crop=${VIDEO_WIDTH}:${VIDEO_HEIGHT},fps=30,zoompan=z='1+0.06*mod(floor(on/81),2)':d=1:s=${VIDEO_WIDTH}x${VIDEO_HEIGHT}:fps=30,${hookCardFilter},${subtitleFilter}[vout]`;
     const command = ffmpeg();
 
     command.input(background).inputOptions(['-stream_loop', '-1']);
     command.input(voiceoverPath);
-    const audioFilters = ['[1:a]aresample=44100,volume=1[voice]'];
-    let mixInput = '[voice]';
-    let inputIndex = 2;
-    if (backgroundMusic) {
-      command.input(backgroundMusic).inputOptions(['-stream_loop', '-1']);
-      audioFilters.push(`[${inputIndex}:a]aresample=44100,volume=0.126[bgm]`);
-      audioFilters.push(`${mixInput}[bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[voicebgm]`);
-      mixInput = '[voicebgm]';
-      inputIndex += 1;
-    }
-    if (soundEffect) {
-      command.input(soundEffect);
-      audioFilters.push(`[${inputIndex}:a]aresample=44100,atrim=duration=1.5,asetpts=PTS-STARTPTS,volume=0.8[sfx]`);
-      audioFilters.push(`${mixInput}[sfx]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[aout]`);
-    } else {
-      audioFilters.push(`${mixInput}alimiter=limit=0.95[aout]`);
-    }
+    command.input(backgroundMusic).inputOptions(['-stream_loop', '-1']);
+    command.input(soundEffect);
+    const audioFilters = [
+      '[1:a]aresample=44100,volume=1[voice]',
+      '[2:a]aresample=44100,volume=0.10[bgm]',
+      '[3:a]aresample=44100,atrim=duration=1.5,asetpts=PTS-STARTPTS,volume=0.85[sfx]',
+      '[voice][bgm][sfx]amix=inputs=3:duration=first:dropout_transition=2:normalize=0,alimiter=limit=0.95[aout]',
+    ];
 
     await new Promise((resolve, reject) => {
       command
@@ -280,7 +391,12 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
           '-b:a', '128k',
           '-movflags', '+faststart',
         ])
-        .on('error', (error) => reject(new Error(`FFmpeg render failed: ${error.message}`, { cause: error })))
+        .on('error', (error, stdout, stderr) => {
+          const diagnostic = typeof stderr === 'string'
+            ? stderr.split(/\r?\n/).filter(Boolean).slice(-35).join('\n')
+            : '';
+          reject(new Error(`FFmpeg render failed: ${error.message}${diagnostic ? `\n${diagnostic}` : ''}`, { cause: error }));
+        })
         .on('end', resolve)
         .save(outputPath);
     });
@@ -297,7 +413,9 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
   } finally {
     await Promise.all([
       rm(subtitlePath, { force: true }),
+      ...(hookTextPath ? [rm(hookTextPath, { force: true })] : []),
       ...(fallbackBackgroundPath ? [rm(fallbackBackgroundPath, { force: true })] : []),
+      ...generatedAudioPaths.map((filePath) => rm(filePath, { force: true })),
     ]);
   }
 }
