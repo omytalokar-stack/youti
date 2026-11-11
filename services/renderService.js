@@ -88,7 +88,7 @@ async function createFallbackBackground(outputPath, durationSeconds) {
   }
 }
 
-async function createFallbackAudio(outputPath, type) {
+async function createFallbackMusic(outputPath) {
   const ffmpegPath = process.env.FFMPEG_PATH || (process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
   const musicFilter = [
     '[0:a]volume=0.22[tone1]',
@@ -96,25 +96,13 @@ async function createFallbackAudio(outputPath, type) {
     '[2:a]volume=0.05[tone3]',
     '[tone1][tone2][tone3]amix=inputs=3:duration=longest:normalize=0,lowpass=f=220,volume=12,afade=t=in:st=0:d=1,afade=t=out:st=19:d=1[aout]',
   ].join(';');
-  const effectFilter = [
-    '[0:a]highpass=f=400,lowpass=f=8000,afade=t=in:st=0:d=0.08,afade=t=out:st=0.08:d=1.12,volume=2[noise]',
-    '[1:a]lowpass=f=160,afade=t=out:st=0:d=0.35,volume=1.4[thump]',
-    '[noise][thump]amix=inputs=2:duration=longest:normalize=0[aout]',
-  ].join(';');
-  const args = type === 'music'
-    ? [
-        '-y',
-        '-f', 'lavfi', '-i', 'sine=frequency=55:sample_rate=44100:duration=20',
-        '-f', 'lavfi', '-i', 'sine=frequency=82.41:sample_rate=44100:duration=20',
-        '-f', 'lavfi', '-i', 'sine=frequency=110:sample_rate=44100:duration=20',
-        '-filter_complex', musicFilter,
-      ]
-    : [
-        '-y',
-        '-f', 'lavfi', '-i', 'anoisesrc=color=white:sample_rate=44100:duration=1.2',
-        '-f', 'lavfi', '-i', 'sine=frequency=90:sample_rate=44100:duration=0.35',
-        '-filter_complex', effectFilter,
-      ];
+  const args = [
+    '-y',
+    '-f', 'lavfi', '-i', 'sine=frequency=55:sample_rate=44100:duration=20',
+    '-f', 'lavfi', '-i', 'sine=frequency=82.41:sample_rate=44100:duration=20',
+    '-f', 'lavfi', '-i', 'sine=frequency=110:sample_rate=44100:duration=20',
+    '-filter_complex', musicFilter,
+  ];
   try {
     await executeFile(ffmpegPath, [
       ...args,
@@ -129,7 +117,7 @@ async function createFallbackAudio(outputPath, type) {
       outputPath,
     ], { windowsHide: true, maxBuffer: 8 * 1024 * 1024 });
   } catch (error) {
-    throw new Error(`Could not create fallback ${type === 'music' ? 'background music' : 'hook sound effect'}: ${error.message}`, { cause: error });
+    throw new Error(`Could not create fallback background music: ${error.message}`, { cause: error });
   }
 }
 
@@ -350,21 +338,19 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
     if (!backgroundMusic) {
       backgroundMusic = path.join(TEMP_DIRECTORY, `fallback-bgm-${randomUUID()}.mp3`);
       generatedAudioPaths.push(backgroundMusic);
-      await createFallbackAudio(backgroundMusic, 'music');
+      await createFallbackMusic(backgroundMusic);
     }
     const hookEffects = soundEffects.filter((file) => {
       const name = path.basename(file);
       return /(?:whoosh|bass|thud|impact|hook)/i.test(name) || /(?:^|[-_.\s])hit(?:$|[-_.\s])/i.test(name);
     });
-    let soundEffect = hookEffects.length
+    const soundEffect = hookEffects.length
       ? hookEffects[Math.floor(Math.random() * hookEffects.length)]
       : soundEffects.length
         ? soundEffects[Math.floor(Math.random() * soundEffects.length)]
         : null;
     if (!soundEffect) {
-      soundEffect = path.join(TEMP_DIRECTORY, `fallback-whoosh-${randomUUID()}.mp3`);
-      generatedAudioPaths.push(soundEffect);
-      await createFallbackAudio(soundEffect, 'effect');
+      console.info('[render] No SFX asset found; rendering voiceover with ducked background music only.');
     }
     const subtitleFilter = `subtitles=filename='${escapeFilterPath(subtitlePath)}':fontsdir='${escapeFilterPath(FONT_DIRECTORY)}'`;
     const hookFont = boldFontPath
@@ -372,7 +358,7 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
       : "font='Sans'";
     let hookCardFilter;
     try {
-      hookCardFilter = `drawbox=x=54:y=518:w=972:h=300:color=black@0.7:t=fill:enable='between(t,0,0.6)',drawtext=${hookFont}:textfile='${escapeFilterPath(hookTextPath)}':fontcolor=0xFFE600:fontsize=82:borderw=4:bordercolor=black:shadowcolor=black@0.85:shadowx=4:shadowy=6:x=(w-text_w)/2:y=h*0.27+(300-text_h)/2:line_spacing=12:enable='between(t,0,0.6)'`;
+      hookCardFilter = `drawbox=x=54:y=518:w=972:h=300:color=black@0.7:t=fill:enable='between(t,0,0.5)',drawtext=${hookFont}:textfile='${escapeFilterPath(hookTextPath)}':fontcolor=0xFFE600:fontsize=82:borderw=4:bordercolor=black:shadowcolor=black@0.85:shadowx=4:shadowy=6:x=(w-text_w)/2:y=h*0.27+(300-text_h)/2:line_spacing=12:enable='between(t,0,0.5)'`;
     } catch (error) {
       console.warn(`[render] Could not configure the hook card; rendering without it: ${error.message}`);
     }
@@ -394,15 +380,25 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
     const audioFilters = [
       '[1:a]aresample=44100,aformat=channel_layouts=mono,volume=1[voice]',
       '[2:a]aresample=44100,aformat=channel_layouts=mono,volume=0.12[bgm]',
-      '[3:a]aresample=44100,aformat=channel_layouts=mono,atrim=duration=1.5,asetpts=PTS-STARTPTS,volume=0.85[sfx]',
-      '[voice][bgm][sfx]amix=inputs=3:duration=first:dropout_transition=2:normalize=0,alimiter=limit=0.95[aout]',
     ];
+    if (soundEffect) {
+      audioFilters.push(
+        '[3:a]aresample=44100,aformat=channel_layouts=mono,atrim=duration=1.5,asetpts=PTS-STARTPTS,volume=0.85[sfx]',
+        '[voice][bgm][sfx]amix=inputs=3:duration=first:dropout_transition=2:normalize=0,alimiter=limit=0.95[aout]',
+      );
+    } else {
+      audioFilters.push(
+        '[voice][bgm]amix=inputs=2:duration=first:dropout_transition=2:normalize=0,alimiter=limit=0.95[aout]',
+      );
+    }
     const renderVideo = (videoFilter) => new Promise((resolve, reject) => {
       const command = ffmpeg();
       command.input(background).inputOptions(['-stream_loop', '-1']);
       command.input(voiceoverPath);
       command.input(backgroundMusic).inputOptions(['-stream_loop', '-1']);
-      command.input(soundEffect);
+      if (soundEffect) {
+        command.input(soundEffect);
+      }
 
       command
         .complexFilter([videoFilter, ...audioFilters])
