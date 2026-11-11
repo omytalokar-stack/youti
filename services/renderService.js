@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import ffmpeg from 'fluent-ffmpeg';
+import { fitSubtitleBeatsToDuration } from './subtitleTiming.js';
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BACKGROUND_DIRECTORY = path.join(PROJECT_ROOT, 'assets', 'backgrounds');
@@ -194,8 +195,9 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
   if (voiceDurationSeconds > MAX_DURATION_SECONDS) {
     throw new Error(`Voiceover is ${voiceDurationSeconds.toFixed(1)} seconds long; Shorts are limited to ${MAX_DURATION_SECONDS} seconds.`);
   }
-  if (subtitleBeats.some((beat) => beat.end > voiceDurationSeconds + 0.25)) {
-    throw new Error('Gemini subtitle timestamps extend beyond the generated voiceover duration.');
+  const fittedSubtitleBeats = fitSubtitleBeatsToDuration(subtitleBeats, voiceDurationSeconds);
+  if (fittedSubtitleBeats !== subtitleBeats) {
+    console.warn('[render] Scaled subtitle timings to match the generated voiceover duration.');
   }
   await mkdir(TEMP_DIRECTORY, { recursive: true });
   await mkdir(FONT_DIRECTORY, { recursive: true });
@@ -204,7 +206,7 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
   let fallbackBackgroundPath;
 
   try {
-    await writeFile(subtitlePath, createAssContent(subtitleBeats, hook), 'utf8');
+    await writeFile(subtitlePath, createAssContent(fittedSubtitleBeats, hook), 'utf8');
     const backgrounds = await listFiles(BACKGROUND_DIRECTORY, new Set(['.mp4', '.mov', '.mkv', '.webm', '.m4v']));
     const audioExtensions = new Set(['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac']);
     const [soundEffects, audioTracks] = await Promise.all([
