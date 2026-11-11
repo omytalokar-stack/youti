@@ -68,7 +68,7 @@ Dashboard ka **Create & Publish Short** button connected channel ke context aur 
 4. Backend check karta hai ki channel connected ho aur saved OAuth grant mein `youtube.upload` scope ho.
 5. Backend channel summary aur persistent channel memory load karta hai.
 6. Gemini khud channel niche se ek topic chunta hai; user se prompt/topic lena zaroori nahi. Model hook, Hindi/Hinglish script, title, description, tags aur subtitle beats deta hai.
-7. Script ko chhota rakhne ke liye prompt 22 words aur 12–15 seconds target karta hai; renderer zyada se zyada 20 seconds ka Short accept karta hai.
+7. Prompt Hindi/Hinglish script ke liye 55–70 spoken words aur 20–25 seconds target karta hai; renderer 25 seconds tak ka Short accept karta hai.
 8. Script aur subtitle text se brackets, labels, quotes aur common English meta-instructions sanitize kiye jaate hain; cleaned text hi Gemini TTS ko diya jaata hai.
 9. Gemini TTS Hindi/Hinglish audio generate karta hai. Audio WAV ho to FFmpeg use MP3 mein convert karta hai.
 10. FFmpeg background clip ko 1080 x 1920 portrait mein scale/crop karke subtle zoom deta hai, uppercase highlighted subtitles burn karta hai, aur pehle 0.5 second ke liye neon-yellow hook card dikhata hai.
@@ -124,7 +124,7 @@ Current renderer Gemini se har scene ka alag AI video/image nahi banata. Visual 
 - `services/geminiService.js` — script/topic generation, format validation, Gemini model aur API-key fallback, chat.
 - `services/geminiApiKeys.js` — backend environment se primary aur optional backup Gemini key.
 - `services/ttsService.js` — Gemini TTS API-key fallback, audio generation aur MP3 conversion.
-- `services/renderService.js` — FFmpeg/FFprobe checks, vertical render, subtitles, background/SFX handling aur 20-second limit.
+- `services/renderService.js` — FFmpeg/FFprobe checks, vertical render, subtitles, background/SFX handling aur 25-second limit.
 - `services/automationService.js` — credential checks se lekar generation, render, upload aur video log tak orchestration.
 - `services/automationLockService.js` — manual aur scheduled publish jobs ke liye shared MongoDB lease.
 - `services/schedulerService.js` — cron schedule aur per-channel automated publishing.
@@ -225,7 +225,7 @@ Important settings:
 - Current visuals licensed background/gradient aur subtitles hain; per-shot AI-generated visuals nahi.
 - Scheduled publishing default public ho sakti hai; schedule enable/disable environment se control hota hai.
 - Gemini text aur TTS dono API quota/model availability par depend karte hain; text generation ka fallback model hai. TTS quota/outage par generation fail ho sakti hai.
-- TTS audio duration generated speech ke hisaab se badal sakti hai. Prompt 12–15 seconds target karta hai aur renderer 20 seconds se lamba voiceover reject karta hai.
+- TTS audio duration generated speech ke hisaab se badal sakti hai. Prompt 20–25 seconds target karta hai aur renderer 25 seconds se lamba voiceover reject karta hai.
 - YouTube API project audit na hone par public uploads restrict ho sakte hain.
 - Channel tactics/mistakes manually curated hain; retention-based automatic learning nahi.
 - Chat history persist nahi hoti.

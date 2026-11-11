@@ -13,7 +13,7 @@ const SFX_DIRECTORY = path.join(PROJECT_ROOT, 'assets', 'sfx');
 const AUDIO_DIRECTORY = path.join(PROJECT_ROOT, 'assets', 'audio');
 const FONT_DIRECTORY = path.join(PROJECT_ROOT, 'assets', 'fonts');
 const TEMP_DIRECTORY = path.join(PROJECT_ROOT, 'temp');
-const MAX_DURATION_SECONDS = 20;
+const MAX_DURATION_SECONDS = 25;
 const VIDEO_WIDTH = 1080;
 const VIDEO_HEIGHT = 1920;
 const FALLBACK_BACKGROUND = "color=c=0x202044:s=540x960:r=30,format=rgb24,geq=r='70+38*sin(X/95+T*1.3)+18*sin(Y/130-T*0.7)':g='65+28*sin(X/145-T*0.9)+16*sin(Y/105+T*1.1)':b='110+48*sin(X/165+T*0.8)+22*sin(Y/115-T*1.2)',noise=alls=4:allf=t+u,vignette=PI/4,format=yuv420p";
@@ -94,13 +94,13 @@ async function createFallbackMusic(outputPath) {
     '[0:a]volume=0.22[tone1]',
     '[1:a]volume=0.12[tone2]',
     '[2:a]volume=0.05[tone3]',
-    '[tone1][tone2][tone3]amix=inputs=3:duration=longest:normalize=0,lowpass=f=220,volume=12,afade=t=in:st=0:d=1,afade=t=out:st=19:d=1[aout]',
+    '[tone1][tone2][tone3]amix=inputs=3:duration=longest:normalize=0,lowpass=f=220,volume=12,afade=t=in:st=0:d=1,afade=t=out:st=24:d=1[aout]',
   ].join(';');
   const args = [
     '-y',
-    '-f', 'lavfi', '-i', 'sine=frequency=55:sample_rate=44100:duration=20',
-    '-f', 'lavfi', '-i', 'sine=frequency=82.41:sample_rate=44100:duration=20',
-    '-f', 'lavfi', '-i', 'sine=frequency=110:sample_rate=44100:duration=20',
+    '-f', 'lavfi', '-i', 'sine=frequency=55:sample_rate=44100:duration=25',
+    '-f', 'lavfi', '-i', 'sine=frequency=82.41:sample_rate=44100:duration=25',
+    '-f', 'lavfi', '-i', 'sine=frequency=110:sample_rate=44100:duration=25',
     '-filter_complex', musicFilter,
   ];
   try {

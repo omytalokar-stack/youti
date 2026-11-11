@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
+  countSpokenWords,
   formatRecentVideoTopics,
   generateFallbackShort,
   selectTopicDirection,
@@ -35,5 +37,17 @@ test('fallback scripts come from a diverse pool and do not repeat consecutively'
   assert.notEqual(memory.lastFallbackScriptIndex, firstIndex);
   assert.notEqual(second.title, first.title);
   assert.equal(first.subtitleBeats.map(({ text }) => text).join(' '), first.script);
-  assert.ok(first.subtitleBeats.every(({ start, end }) => start >= 0 && end <= 20 && end > start));
+  assert.ok(countSpokenWords(first.script) >= 55 && countSpokenWords(first.script) <= 70);
+  assert.equal(first.subtitleBeats.at(-1).end, 20 + ((countSpokenWords(first.script) - 55) / 15) * 5);
+  assert.ok(first.subtitleBeats.every(({ start, end }) => start >= 0 && end <= 25 && end > start));
+});
+
+test('every configured fallback script targets 55 to 70 spoken words', async () => {
+  const fallbackScripts = JSON.parse(await readFile(new URL('../config/fallbackScripts.json', import.meta.url), 'utf8'));
+
+  assert.ok(fallbackScripts.length >= 20);
+  assert.ok(fallbackScripts.every(({ script }) => {
+    const wordCount = countSpokenWords(script);
+    return wordCount >= 55 && wordCount <= 70;
+  }));
 });

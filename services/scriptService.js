@@ -4,6 +4,10 @@ import VideoLog from '../models/VideoLog.js';
 
 const FALLBACK_SCRIPTS_URL = new URL('../config/fallbackScripts.json', import.meta.url);
 
+export function countSpokenWords(text) {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
 export const TOPIC_CATEGORIES = [
   {
     name: 'Space Mysteries',
@@ -65,14 +69,15 @@ export function selectTopicDirection(random = Math.random) {
 function createSubtitleBeats(script) {
   const words = script.trim().split(/\s+/);
   const wordsPerBeat = 4;
-  const secondsPerBeat = 2.5;
+  const durationSeconds = 20 + ((words.length - 55) / 15) * 5;
+  const secondsPerBeat = durationSeconds / Math.ceil(words.length / wordsPerBeat);
 
   return Array.from({ length: Math.ceil(words.length / wordsPerBeat) }, (_, index) => {
     const beatWords = words.slice(index * wordsPerBeat, (index + 1) * wordsPerBeat);
     const highlightedWord = beatWords[beatWords.length - 1].replace(/[.,!?।]+$/u, '');
     return {
       start: index * secondsPerBeat,
-      end: (index + 1) * secondsPerBeat,
+      end: Math.min((index + 1) * secondsPerBeat, durationSeconds),
       text: beatWords.join(' '),
       highlightedWord,
     };
@@ -92,6 +97,8 @@ export async function generateFallbackShort(channelMemory, random = Math.random)
   const selection = availableIndexes[Math.floor(random() * availableIndexes.length)];
   const fallback = fallbackScripts[selection];
   if (
+    countSpokenWords(fallback?.script ?? '') < 55 ||
+    countSpokenWords(fallback?.script ?? '') > 70 ||
     typeof fallback?.hook !== 'string' ||
     typeof fallback.script !== 'string' ||
     typeof fallback.title !== 'string' ||

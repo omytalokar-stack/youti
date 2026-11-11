@@ -1,6 +1,6 @@
 export function fitSubtitleBeatsToDuration(subtitleBeats, durationSeconds) {
   const lastBeatEnd = Math.max(...subtitleBeats.map((beat) => beat.end));
-  if (lastBeatEnd <= durationSeconds) {
+  if (Math.abs(lastBeatEnd - durationSeconds) < 0.001) {
     return subtitleBeats;
   }
 

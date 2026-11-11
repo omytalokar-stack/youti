@@ -2,6 +2,7 @@ import { GoogleGenAI } from '@google/genai';
 import { getGeminiErrorStatus, runGeminiWithFallback } from './geminiApiKeys.js';
 import {
   formatRecentVideoTopics,
+  countSpokenWords,
   generateFallbackShort,
   selectTopicDirection,
 } from './scriptService.js';
@@ -98,8 +99,10 @@ async function generateAutomatedShortFromGemini(channelMemory, channelContext, r
     '{"hook":"string","script":"string","title":"string","description":"string","tags":["string"],"subtitleBeats":[{"start":0,"end":2,"text":"spoken phrase","highlightedWord":"word"}]}.',
     'Choose one specific topic yourself from the channel niche and context; do not ask the user for a topic. Prefer reliable, well-established facts and avoid precise claims you cannot support.',
     `TOPIC DIRECTION: Use the category "${topicDirection.category}" and explore this sub-niche: "${topicDirection.subNiche}". Choose a specific, factual angle that is not covered by the recent history.`,
-    'Write only natural spoken Hindi or Hinglish in script and subtitleBeats. Never include labels, quotation marks, stage directions, bracketed text, or instructions in spoken text. Limit the script to 22 words and target 12-15 seconds of speech so it stays safely under the 20-second limit.',
-    'Split the exact spoken script into sequential subtitleBeats. Timestamps are seconds from the start, each beat is 1-4 seconds, and text must match the spoken script. Highlight one important word per beat.',
+    'Generate an engaging, fast-paced Hindi/Hinglish script of EXACTLY 55 to 70 words (which takes 20 to 25 seconds to speak at normal TTS speed). Do NOT restrict scripts to 20 words. Count only spoken words in script.',
+    'Structure the script into 3 clear spoken segments: Part 1, a strong hook from 0-5 seconds (~15 words); Part 2, the core mystery or scientific explanation from 5-18 seconds (~40 words); Part 3, a surprising twist or engagement question from 18-23 seconds (~15 words). The opening of script must be spoken naturally; hook should match that opening.',
+    'Write only natural spoken Hindi or Hinglish in script and subtitleBeats. Never include segment labels, quotation marks, stage directions, bracketed text, or instructions in spoken text.',
+    'Split the exact spoken script into sequential subtitleBeats. Timestamps are seconds from the start, each beat is 1-4 seconds, text must match the spoken script exactly, and the final beat must end between 20 and 25 seconds. Highlight one important word per beat.',
     `CHANNEL CONTEXT:\nChannel title: ${channelContext.title || 'Not provided'}\nChannel description: ${(channelContext.description || 'Not provided').slice(0, 2000)}\nCreate content relevant to this channel. Do not invent facts about the channel.`,
     `RECENTLY PUBLISHED VIDEO HISTORY:\n${recentTopics}\nYou must NEVER repeat or closely mimic any of these recently published topics. Generate an entirely fresh, unique mind-blowing fact.`,
     'Do not invent performance data or claim that a concept is guaranteed to succeed.',
@@ -144,22 +147,31 @@ async function generateAutomatedShortFromGemini(channelMemory, channelContext, r
         highlightedWord: sanitizeSpokenText(beat?.highlightedWord),
       }))
     : generated?.subtitleBeats;
+  const spokenWordCount = countSpokenWords(script);
+  const subtitleScript = Array.isArray(subtitleBeats) &&
+    subtitleBeats.every((beat) => typeof beat?.text === 'string')
+    ? subtitleBeats.map((beat) => beat.text).join(' ').replace(/\s+/g, ' ').trim()
+    : '';
   if (
     !generated ||
     typeof generated !== 'object' ||
     requiredStrings.some((field) => typeof generated[field] !== 'string') ||
     !script ||
+    spokenWordCount < 55 ||
+    spokenWordCount > 70 ||
+    subtitleScript !== script ||
     !Array.isArray(generated.tags) ||
     generated.tags.some((tag) => typeof tag !== 'string') ||
     !Array.isArray(subtitleBeats) ||
     subtitleBeats.length === 0 ||
-    subtitleBeats.some((beat) =>
+    subtitleBeats.some((beat, index) =>
       !beat ||
       typeof beat.start !== 'number' ||
       typeof beat.end !== 'number' ||
       beat.start < 0 ||
       beat.end <= beat.start ||
-      beat.end > 20 ||
+      beat.end > 25 ||
+      (index > 0 && beat.start < subtitleBeats[index - 1].end) ||
       typeof beat.text !== 'string' ||
       !beat.text.trim() ||
       typeof beat.highlightedWord !== 'string' ||
@@ -167,6 +179,10 @@ async function generateAutomatedShortFromGemini(channelMemory, channelContext, r
     )
   ) {
     throw new Error('Gemini response did not match the required video format.');
+  }
+  const finalBeatEnd = subtitleBeats[subtitleBeats.length - 1].end;
+  if (finalBeatEnd < 20 || finalBeatEnd > 25) {
+    throw new Error('Gemini subtitle timing did not span the required 20-25 seconds.');
   }
 
   return {
