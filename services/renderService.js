@@ -359,22 +359,39 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
     const hookFont = boldFontPath
       ? `fontfile='${escapeFilterPath(boldFontPath)}'`
       : "font='Sans'";
-    const hookCardFilter = `drawbox=x=54:y=518:w=972:h=300:color=black@0.7:t=fill:enable='between(t,0,0.6)',drawtext=${hookFont}:textfile='${escapeFilterPath(hookTextPath)}':text_align=center:fontcolor=0xFFE600:fontsize=82:borderw=4:bordercolor=black:shadowcolor=black@0.85:shadowx=4:shadowy=6:x=(w-text_w)/2:y=h*0.27+(300-text_h)/2:line_spacing=12:enable='between(t,0,0.6)'`;
-    const videoFilter = `[0:v]scale=${VIDEO_WIDTH}:${VIDEO_HEIGHT}:force_original_aspect_ratio=increase,crop=${VIDEO_WIDTH}:${VIDEO_HEIGHT},fps=30,zoompan=z='1+0.06*mod(floor(on/81),2)':d=1:s=${VIDEO_WIDTH}x${VIDEO_HEIGHT}:fps=30,${hookCardFilter},${subtitleFilter}[vout]`;
-    const command = ffmpeg();
+    let hookCardFilter;
+    try {
+      hookCardFilter = `drawbox=x=54:y=518:w=972:h=300:color=black@0.7:t=fill:enable='between(t,0,0.6)',drawtext=${hookFont}:textfile='${escapeFilterPath(hookTextPath)}':fontcolor=0xFFE600:fontsize=82:borderw=4:bordercolor=black:shadowcolor=black@0.85:shadowx=4:shadowy=6:x=(w-text_w)/2:y=h*0.27+(300-text_h)/2:line_spacing=12:enable='between(t,0,0.6)'`;
+    } catch (error) {
+      console.warn(`[render] Could not configure the hook card; rendering without it: ${error.message}`);
+    }
 
-    command.input(background).inputOptions(['-stream_loop', '-1']);
-    command.input(voiceoverPath);
-    command.input(backgroundMusic).inputOptions(['-stream_loop', '-1']);
-    command.input(soundEffect);
+    const createVideoFilter = (includeHookCard) => {
+      const filters = [
+        `scale=${VIDEO_WIDTH}:${VIDEO_HEIGHT}:force_original_aspect_ratio=increase`,
+        `crop=${VIDEO_WIDTH}:${VIDEO_HEIGHT}`,
+        'fps=30',
+        `zoompan=z='1+0.06*mod(floor(on/81),2)':d=1:s=${VIDEO_WIDTH}x${VIDEO_HEIGHT}:fps=30`,
+      ];
+      if (includeHookCard && hookCardFilter) {
+        filters.push(hookCardFilter);
+      }
+      filters.push(subtitleFilter);
+      return `[0:v]${filters.join(',')}[vout]`;
+    };
     const audioFilters = [
       '[1:a]aresample=44100,volume=1[voice]',
       '[2:a]aresample=44100,volume=0.10[bgm]',
       '[3:a]aresample=44100,atrim=duration=1.5,asetpts=PTS-STARTPTS,volume=0.85[sfx]',
       '[voice][bgm][sfx]amix=inputs=3:duration=first:dropout_transition=2:normalize=0,alimiter=limit=0.95[aout]',
     ];
+    const renderVideo = (videoFilter) => new Promise((resolve, reject) => {
+      const command = ffmpeg();
+      command.input(background).inputOptions(['-stream_loop', '-1']);
+      command.input(voiceoverPath);
+      command.input(backgroundMusic).inputOptions(['-stream_loop', '-1']);
+      command.input(soundEffect);
 
-    await new Promise((resolve, reject) => {
       command
         .complexFilter([videoFilter, ...audioFilters])
         .outputOptions([
@@ -400,6 +417,17 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
         .on('end', resolve)
         .save(outputPath);
     });
+
+    try {
+      await renderVideo(createVideoFilter(true));
+    } catch (error) {
+      if (!hookCardFilter || !/drawtext|option ['"].*['"] not found/i.test(error.message)) {
+        throw error;
+      }
+      console.warn(`[render] Hook-card drawtext failed; retrying without the hook overlay: ${error.message}`);
+      await rm(outputPath, { force: true });
+      await renderVideo(createVideoFilter(false));
+    }
 
     const result = await stat(outputPath);
     if (!result.isFile() || result.size === 0) {
