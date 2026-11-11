@@ -72,7 +72,13 @@ async function createFallbackBackground(outputPath) {
       '-t', '4',
       '-an',
       '-c:v', 'libx264',
+      '-threads', '1',
+      '-filter_threads', '1',
+      '-filter_complex_threads', '1',
       '-preset', 'ultrafast',
+      '-crf', '26',
+      '-maxrate', '4M',
+      '-bufsize', '2M',
       '-pix_fmt', 'yuv420p',
       '-r', '30',
       outputPath,
@@ -112,8 +118,13 @@ async function createFallbackAudio(outputPath, type) {
   try {
     await executeFile(ffmpegPath, [
       ...args,
+      '-threads', '1',
+      '-filter_threads', '1',
+      '-filter_complex_threads', '1',
       '-map', '[aout]',
       '-c:a', 'libmp3lame',
+      '-ac', '1',
+      '-ar', '44100',
       '-b:a', '96k',
       outputPath,
     ], { windowsHide: true, maxBuffer: 8 * 1024 * 1024 });
@@ -368,10 +379,11 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
 
     const createVideoFilter = (includeHookCard) => {
       const filters = [
-        `scale=${VIDEO_WIDTH}:${VIDEO_HEIGHT}:force_original_aspect_ratio=increase`,
-        `crop=${VIDEO_WIDTH}:${VIDEO_HEIGHT}`,
+        'scale=540:960:force_original_aspect_ratio=increase',
+        'crop=540:960',
         'fps=30',
-        `zoompan=z='1+0.06*mod(floor(on/81),2)':d=1:s=${VIDEO_WIDTH}x${VIDEO_HEIGHT}:fps=30`,
+        "zoompan=z='1+0.06*mod(floor(on/81),2)':d=1:s=540x960:fps=30",
+        `scale=${VIDEO_WIDTH}:${VIDEO_HEIGHT}`,
       ];
       if (includeHookCard && hookCardFilter) {
         filters.push(hookCardFilter);
@@ -380,9 +392,9 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
       return `[0:v]${filters.join(',')}[vout]`;
     };
     const audioFilters = [
-      '[1:a]aresample=44100,volume=1[voice]',
-      '[2:a]aresample=44100,volume=0.10[bgm]',
-      '[3:a]aresample=44100,atrim=duration=1.5,asetpts=PTS-STARTPTS,volume=0.85[sfx]',
+      '[1:a]aresample=44100,aformat=channel_layouts=mono,volume=1[voice]',
+      '[2:a]aresample=44100,aformat=channel_layouts=mono,volume=0.10[bgm]',
+      '[3:a]aresample=44100,aformat=channel_layouts=mono,atrim=duration=1.5,asetpts=PTS-STARTPTS,volume=0.85[sfx]',
       '[voice][bgm][sfx]amix=inputs=3:duration=first:dropout_transition=2:normalize=0,alimiter=limit=0.95[aout]',
     ];
     const renderVideo = (videoFilter) => new Promise((resolve, reject) => {
@@ -395,17 +407,24 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
       command
         .complexFilter([videoFilter, ...audioFilters])
         .outputOptions([
+          '-threads', '1',
+          '-filter_threads', '1',
+          '-filter_complex_threads', '1',
           '-map', '[vout]',
           '-map', '[aout]',
           '-t', String(MAX_DURATION_SECONDS),
           '-shortest',
           '-r', '30',
           '-c:v', 'libx264',
-          '-preset', 'veryfast',
-          '-crf', '23',
+          '-preset', 'ultrafast',
+          '-crf', '26',
+          '-maxrate', '4M',
+          '-bufsize', '2M',
           '-pix_fmt', 'yuv420p',
           '-c:a', 'aac',
           '-b:a', '128k',
+          '-ac', '1',
+          '-ar', '44100',
           '-movflags', '+faststart',
         ])
         .on('error', (error, stdout, stderr) => {
@@ -419,6 +438,7 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
     });
 
     try {
+      global.gc?.();
       await renderVideo(createVideoFilter(true));
     } catch (error) {
       if (!hookCardFilter || !/drawtext|option ['"].*['"] not found/i.test(error.message)) {
@@ -426,6 +446,7 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
       }
       console.warn(`[render] Hook-card drawtext failed; retrying without the hook overlay: ${error.message}`);
       await rm(outputPath, { force: true });
+      global.gc?.();
       await renderVideo(createVideoFilter(false));
     }
 
