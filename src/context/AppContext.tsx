@@ -291,6 +291,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setPublishedShort(null);
     setLastAutonomousRun(null);
     void refreshStats();
+    const interval = window.setInterval(() => {
+      if (!document.hidden) {
+        void refreshStats();
+      }
+    }, 60_000);
+    return () => window.clearInterval(interval);
   }, [refreshStats]);
 
   const toggleTheme = useCallback(() => {

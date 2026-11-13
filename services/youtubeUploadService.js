@@ -100,6 +100,7 @@ export async function uploadVideoToYouTube(
   }
   const auth = await getAuthorizedYouTubeClient(channelId);
   const youtube = google.youtube({ version: 'v3', auth });
+  console.info('[youtube] Uploading video...');
   const response = await youtube.videos.insert({
     part: ['snippet', 'status'],
     requestBody: {
@@ -123,6 +124,7 @@ export async function uploadVideoToYouTube(
   if (!videoId) {
     throw new Error('YouTube upload completed without returning a video ID.');
   }
+  console.info(`[youtube] Upload complete: ${videoId}`);
   return {
     videoId,
     title: response.data.snippet?.title ?? uploadTitle,

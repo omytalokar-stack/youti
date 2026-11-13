@@ -14,6 +14,7 @@ const AUDIO_DIRECTORY = path.join(PROJECT_ROOT, 'assets', 'audio');
 const FONT_DIRECTORY = path.join(PROJECT_ROOT, 'assets', 'fonts');
 const TEMP_DIRECTORY = path.join(PROJECT_ROOT, 'temp');
 const MAX_DURATION_SECONDS = 25;
+const FFMPEG_TIMEOUT_MS = 180 * 1000;
 const VIDEO_WIDTH = 1080;
 const VIDEO_HEIGHT = 1920;
 const FALLBACK_BACKGROUND = "color=c=0x202044:s=540x960:r=30,format=rgb24,geq=r='70+38*sin(X/95+T*1.3)+18*sin(Y/130-T*0.7)':g='65+28*sin(X/145-T*0.9)+16*sin(Y/105+T*1.1)':b='110+48*sin(X/165+T*0.8)+22*sin(Y/115-T*1.2)',noise=alls=4:allf=t+u,vignette=PI/4,format=yuv420p";
@@ -82,7 +83,12 @@ async function createFallbackBackground(outputPath, durationSeconds) {
       '-pix_fmt', 'yuv420p',
       '-r', '30',
       outputPath,
-    ], { windowsHide: true, maxBuffer: 8 * 1024 * 1024 });
+    ], {
+      windowsHide: true,
+      maxBuffer: 8 * 1024 * 1024,
+      timeout: FFMPEG_TIMEOUT_MS,
+      killSignal: 'SIGKILL',
+    });
   } catch (error) {
     throw new Error(`Could not create fallback gradient background: ${error.message}`, { cause: error });
   }
@@ -115,7 +121,12 @@ async function createFallbackMusic(outputPath) {
       '-ar', '44100',
       '-b:a', '96k',
       outputPath,
-    ], { windowsHide: true, maxBuffer: 8 * 1024 * 1024 });
+    ], {
+      windowsHide: true,
+      maxBuffer: 8 * 1024 * 1024,
+      timeout: FFMPEG_TIMEOUT_MS,
+      killSignal: 'SIGKILL',
+    });
   } catch (error) {
     throw new Error(`Could not create fallback background music: ${error.message}`, { cause: error });
   }
@@ -253,7 +264,13 @@ function probeDuration(filePath) {
 function getFfmpegFilters() {
   const ffmpegPath = process.env.FFMPEG_PATH || (process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
   return new Promise((resolve, reject) => {
-    execFile(ffmpegPath, ['-filters'], { encoding: 'utf8', windowsHide: true, maxBuffer: 8 * 1024 * 1024 }, (error, stdout) => {
+    execFile(ffmpegPath, ['-filters'], {
+      encoding: 'utf8',
+      windowsHide: true,
+      maxBuffer: 8 * 1024 * 1024,
+      timeout: FFMPEG_TIMEOUT_MS,
+      killSignal: 'SIGKILL',
+    }, (error, stdout) => {
       if (error) {
         reject(error);
         return;
@@ -393,6 +410,20 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
     }
     const renderVideo = (videoFilter) => new Promise((resolve, reject) => {
       const command = ffmpeg();
+      let settled = false;
+      let timeout;
+      const finishWithError = (error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        reject(error);
+      };
+      const finishSuccessfully = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolve();
+      };
       command.input(background).inputOptions(['-stream_loop', '-1']);
       command.input(voiceoverPath);
       command.input(backgroundMusic).inputOptions(['-stream_loop', '-1']);
@@ -400,42 +431,53 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
         command.input(soundEffect);
       }
 
+      command.complexFilter([videoFilter, ...audioFilters]);
+      command.outputOptions([
+        '-threads', '1',
+        '-filter_threads', '1',
+        '-filter_complex_threads', '1',
+        '-map', '[vout]',
+        '-map', '[aout]',
+        '-t', String(voiceDurationSeconds),
+        '-shortest',
+        '-r', '30',
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-crf', '28',
+        '-maxrate', '4M',
+        '-bufsize', '2M',
+        '-pix_fmt', 'yuv420p',
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-ac', '1',
+        '-ar', '44100',
+        '-movflags', '+faststart',
+      ]);
+      timeout = setTimeout(() => {
+        try {
+          command.kill('SIGKILL');
+        } catch (error) {
+          console.error('[render] Could not terminate FFmpeg after its timeout:', error);
+        }
+        finishWithError(new Error(`FFmpeg render timed out after ${FFMPEG_TIMEOUT_MS / 1000} seconds and was terminated.`));
+      }, FFMPEG_TIMEOUT_MS);
       command
-        .complexFilter([videoFilter, ...audioFilters])
-        .outputOptions([
-          '-threads', '1',
-          '-filter_threads', '1',
-          '-filter_complex_threads', '1',
-          '-map', '[vout]',
-          '-map', '[aout]',
-          '-t', String(voiceDurationSeconds),
-          '-shortest',
-          '-r', '30',
-          '-c:v', 'libx264',
-          '-preset', 'ultrafast',
-          '-crf', '26',
-          '-maxrate', '4M',
-          '-bufsize', '2M',
-          '-pix_fmt', 'yuv420p',
-          '-c:a', 'aac',
-          '-b:a', '128k',
-          '-ac', '1',
-          '-ar', '44100',
-          '-movflags', '+faststart',
-        ])
         .on('error', (error, stdout, stderr) => {
           const diagnostic = typeof stderr === 'string'
             ? stderr.split(/\r?\n/).filter(Boolean).slice(-35).join('\n')
             : '';
-          reject(new Error(`FFmpeg render failed: ${error.message}${diagnostic ? `\n${diagnostic}` : ''}`, { cause: error }));
+          finishWithError(new Error(`FFmpeg render failed: ${error.message}${diagnostic ? `\n${diagnostic}` : ''}`, { cause: error }));
         })
-        .on('end', resolve)
+        .on('end', finishSuccessfully)
         .save(outputPath);
     });
 
+    let encodeStartedAt = Date.now();
     try {
       global.gc?.();
+      console.info('[render] Starting FFmpeg encode...');
       await renderVideo(createVideoFilter(true));
+      console.info(`[render] FFmpeg finished in ${((Date.now() - encodeStartedAt) / 1000).toFixed(1)}s`);
     } catch (error) {
       if (!hookCardFilter || !/drawtext|option ['"].*['"] not found/i.test(error.message)) {
         throw error;
@@ -443,7 +485,10 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
       console.warn(`[render] Hook-card drawtext failed; retrying without the hook overlay: ${error.message}`);
       await rm(outputPath, { force: true });
       global.gc?.();
+      encodeStartedAt = Date.now();
+      console.info('[render] Starting FFmpeg encode...');
       await renderVideo(createVideoFilter(false));
+      console.info(`[render] FFmpeg finished in ${((Date.now() - encodeStartedAt) / 1000).toFixed(1)}s`);
     }
 
     const result = await stat(outputPath);

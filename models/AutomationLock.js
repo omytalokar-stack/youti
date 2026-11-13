@@ -5,6 +5,7 @@ const automationLockSchema = new mongoose.Schema(
     channelId: { type: String, required: true, unique: true, trim: true },
     leaseId: { type: String, required: true },
     leaseUntil: { type: Date, required: true },
+    publishStartedAt: { type: Date, required: true },
   },
   { timestamps: true },
 );

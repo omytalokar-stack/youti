@@ -2,15 +2,19 @@ import { randomUUID } from 'node:crypto';
 import AutomationLock from '../models/AutomationLock.js';
 
 const LEASE_DURATION_MS = 5 * 60 * 1000;
+const MAX_PUBLISH_DURATION_MS = 4 * 60 * 1000;
 const LEASE_HEARTBEAT_MS = 60 * 1000;
 const leaseHeartbeats = new Map();
 
 export function buildStaleLeaseFilter(channelId, now = new Date()) {
   const staleBefore = new Date(now.getTime() - LEASE_DURATION_MS);
+  const publishStaleBefore = new Date(now.getTime() - MAX_PUBLISH_DURATION_MS);
   return {
     channelId,
     $or: [
       { leaseUntil: { $lte: now } },
+      { publishStartedAt: { $lte: publishStaleBefore } },
+      { publishStartedAt: { $exists: false }, createdAt: { $lte: publishStaleBefore } },
       { updatedAt: { $lte: staleBefore } },
       { updatedAt: { $exists: false }, createdAt: { $lte: staleBefore } },
     ],
@@ -44,7 +48,7 @@ export async function claimChannelLease(channelId) {
   const leaseUntil = new Date(now.getTime() + LEASE_DURATION_MS);
   const existing = await AutomationLock.findOneAndUpdate(
     buildStaleLeaseFilter(channelId, now),
-    { $set: { leaseId, leaseUntil } },
+    { $set: { leaseId, leaseUntil, publishStartedAt: now } },
     { new: true },
   );
   if (existing) {
@@ -53,7 +57,7 @@ export async function claimChannelLease(channelId) {
   }
 
   try {
-    await AutomationLock.create({ channelId, leaseId, leaseUntil });
+    await AutomationLock.create({ channelId, leaseId, leaseUntil, publishStartedAt: now });
     startLeaseHeartbeat(channelId, leaseId);
     return leaseId;
   } catch (error) {
