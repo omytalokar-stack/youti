@@ -36,6 +36,34 @@ export async function markScheduleCycleSuccessful(channelId, cycleDate) {
   );
 }
 
+export async function recordAutomationRun(channelId, {
+  status,
+  step = '',
+  error = '',
+  cycleDate,
+}) {
+  const safeError = String(error)
+    .replace(/Bearer\s+\S+/gi, 'Bearer [REDACTED]')
+    .replace(/\bAIza[0-9A-Za-z_-]{20,}\b/g, '[REDACTED]')
+    .replace(/\bya29\.[A-Za-z0-9._-]+/g, '[REDACTED]')
+    .replace(/("?(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret)"?\s*:\s*"?)[^"\s,}]+/gi, '$1[REDACTED]')
+    .slice(0, 1000);
+  const $set = {
+    lastRunAt: new Date(),
+    lastRunStatus: status,
+    lastRunStep: step,
+    lastRunError: safeError,
+  };
+  if (cycleDate) {
+    $set.activeCycleDate = cycleDate;
+  }
+  return AutomationScheduleState.findOneAndUpdate(
+    { channelId },
+    { $set },
+    { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true },
+  );
+}
+
 export async function markManualPublishAsScheduledSuccess(channelId, now = new Date()) {
   const timezone = process.env.AUTOMATION_TIMEZONE?.trim() || 'Asia/Kolkata';
   const startHour = Number(process.env.AUTOMATION_START_HOUR ?? 16);

@@ -22,12 +22,12 @@ Set `FRONTEND_URL` to the frontend origin and set `YOUTUBE_REDIRECT_URI` to the 
 
 ## Automatic video publishing
 
-- The backend generates a short Hindi/Hinglish script and timestamped subtitle beats with Gemini, generates Hindi speech with Gemini TTS (falling back to Microsoft Edge TTS `hi-IN-MadhurNeural` for Gemini quota/request errors), renders a vertical MP4, and uploads it to the authorized channel.
-- Spoken text is sanitized before synthesis; render output includes a neon-yellow, outlined hook title card for the first 0.6 seconds, bold highlighted lower-third subtitles, alternating background zoom cuts every 2.7 seconds, and a three-track voice/BGM/SFX mix. Licensed BGM and whoosh/impact assets are used when available; otherwise the renderer generates temporary synthesized suspense tones and a noise-sweep hook effect locally. Upload metadata appends `#Shorts` to the title and standard niche hashtags to the description.
+- The backend generates a short Hindi/Hinglish script and timestamped subtitle beats with Gemini, generates Hindi speech with Gemini TTS (falling back to Microsoft Edge TTS `hi-IN-MadhurNeural` for Gemini quota/request errors), renders a 720x1280, 24 fps vertical MP4, and uploads it to the authorized channel.
+- Spoken text is sanitized before synthesis; render output includes a neon-yellow, outlined hook title card for the first 0.5 seconds, bold highlighted lower-third subtitles, and a three-track voice/BGM/SFX mix. Licensed BGM and whoosh/impact assets are used when available; otherwise the renderer generates temporary synthesized suspense tones and a simple solid background locally. Upload metadata appends `#Shorts` to the title and standard niche hashtags to the description.
 - Clicking **Create & Publish Short** in the dashboard or Agent Brain chooses a channel-relevant topic, generates the script, voiceover, and video, then immediately uploads it as **public**. Check the generated content and channel before clicking; this is a real public YouTube upload.
-- By default, the scheduler starts one daily public-publishing cycle at 4:00 PM in `Asia/Kolkata`. If generation or upload fails, it retries every 30 minutes until that cycle succeeds; after success it waits until 4:00 PM the next day. This is a real automatic public-publishing schedule. Set `AUTOMATION_CRON=disabled` to turn it off.
+- By default, the scheduler starts one daily public-publishing cycle at 4:00 PM in `Asia/Kolkata` (`0 16 * * *` in that timezone, equivalent to `30 10 * * *` in UTC). A separate 30-minute schedule retries a pending cycle until it succeeds; after success it waits until 4:00 PM the next day. This is a real automatic public-publishing schedule. Set `AUTOMATION_CRON=disabled` to turn it off. Other `AUTOMATION_CRON` expressions are ignored so a stale expression cannot shift the daily run.
 - A successful manual **Create & Publish Short** after the daily start time completes that day's pending cycle, preventing scheduled retries from creating a second upload. A manual upload before 4:00 PM does not cancel that day's scheduled run.
-- `AUTOMATION_CRON` controls how often the scheduler checks for work and should remain `*/30 * * * *` for the default retry behavior. `AUTOMATION_START_HOUR` selects the daily start hour from 0 to 23 in `AUTOMATION_TIMEZONE`.
+- `AUTOMATION_START_HOUR` selects the daily start hour from 0 to 23 in `AUTOMATION_TIMEZONE`; defaults are `16` and `Asia/Kolkata`. The daily schedule and its half-hour retry schedule are managed separately.
 - `AUTOMATION_TIMEZONE` must be a valid IANA timezone, such as `Asia/Kolkata` or `America/Los_Angeles`; values like `Asia` are incomplete. If it is invalid, the backend still starts but scheduled publishing stays disabled until the value is corrected.
 - Set `GEMINI_API_KEY`, `GEMINI_API_KEY_2`, and/or comma-separated `GEMINI_API_KEYS` in the backend environment. Keys are deduplicated and rotated across requests; temporary quota, availability, or timeout failures try a bounded key/model fallback. Script generation uses the current text-model chain (`gemini-flash-lite-latest`, `gemini-3-flash-preview`, `gemini-3.1-flash-lite`, `gemini-3.8-flash`), while TTS stays on the configured audio model and only rotates keys. Never expose API keys in the frontend or commit their values.
 - `YOUTUBE_UPLOAD_PRIVACY=public` controls scheduled uploads. The manual **Create & Publish Short** button always publishes publicly.
@@ -38,6 +38,7 @@ Set `FRONTEND_URL` to the frontend origin and set `YOUTUBE_REDIRECT_URI` to the 
 - `fluent-ffmpeg` does not bundle FFmpeg. Set `FFMPEG_PATH` and `FFPROBE_PATH` if executables are not on `PATH`; the renderer checks for the binary and the `subtitles` filter before processing.
 - Generated voiceover and subtitle temporaries are removed after the run. The latest rendered file is stored at `renders/short_output.mp4`; it is not exposed as a public download route.
 - The backend must stay running at the scheduled time. Serverless or sleeping hosts need an external scheduler/always-on worker instead of an in-process cron.
+- An external cron can issue `GET /api/automation/trigger` as a fallback. Configure `AUTOMATION_TRIGGER_SECRET` and send it in the `X-Automation-Trigger-Secret` header (or as a Bearer token); requests are rejected if the secret is unset or invalid. The endpoint returns `202 Accepted` immediately and the cycle check will skip a cycle that already succeeded for its IST date. For example, schedule this GET at 16:00 `Asia/Kolkata` in cron-job.org.
 - Gemini TTS uses the configured Gemini API key and quota. On Gemini 400/429 or quota-exceeded errors, voiceover generation falls back to Microsoft Edge TTS; both providers produce MP3 for the renderer. Edge TTS requires an internet connection and can fail independently if Microsoft's service is unavailable.
 - YouTube may restrict public uploads from API projects that have not completed YouTube's required API audit. The API's accepted privacy status does not guarantee public visibility for an unaudited project.
 
@@ -52,7 +53,8 @@ Set `FRONTEND_URL` to the frontend origin and set `YOUTUBE_REDIRECT_URI` to the 
 
 ## API
 
-- `GET /api/health` — process health and uptime.
+- `GET /api/health` — process health, uptime, and the most recent automated cycle status, step, and error (if any).
+- `GET /api/automation/trigger` — authenticated asynchronous daily-cycle fallback trigger; requires `AUTOMATION_TRIGGER_SECRET`.
 - `GET /api/brain/:channelId` — get or initialize channel memory.
 - `POST /api/brain/cycle` — JSON body `{ "channelId": "..." }`; generate a text-only Short draft.
 - `POST /api/brain/publish` — JSON body `{ "channelId": "..." }`; generate a Short, render voiceover and video, and upload it publicly. Returns the YouTube URL; rejects overlapping publishes for the same channel.

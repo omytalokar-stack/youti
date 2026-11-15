@@ -14,10 +14,11 @@ const AUDIO_DIRECTORY = path.join(PROJECT_ROOT, 'assets', 'audio');
 const FONT_DIRECTORY = path.join(PROJECT_ROOT, 'assets', 'fonts');
 const TEMP_DIRECTORY = path.join(PROJECT_ROOT, 'temp');
 const MAX_DURATION_SECONDS = 25;
-const FFMPEG_TIMEOUT_MS = 180 * 1000;
-const VIDEO_WIDTH = 1080;
-const VIDEO_HEIGHT = 1920;
-const FALLBACK_BACKGROUND = "color=c=0x202044:s=540x960:r=30,format=rgb24,geq=r='70+38*sin(X/95+T*1.3)+18*sin(Y/130-T*0.7)':g='65+28*sin(X/145-T*0.9)+16*sin(Y/105+T*1.1)':b='110+48*sin(X/165+T*0.8)+22*sin(Y/115-T*1.2)',noise=alls=4:allf=t+u,vignette=PI/4,format=yuv420p";
+const FFMPEG_TIMEOUT_MS = 480 * 1000;
+const VIDEO_WIDTH = 720;
+const VIDEO_HEIGHT = 1280;
+const VIDEO_FPS = 24;
+const FALLBACK_BACKGROUND = `color=c=0x202044:s=${VIDEO_WIDTH}x${VIDEO_HEIGHT}:r=${VIDEO_FPS},format=yuv420p`;
 const executeFile = promisify(execFile);
 
 if (process.env.FFMPEG_PATH) {
@@ -77,11 +78,12 @@ async function createFallbackBackground(outputPath, durationSeconds) {
       '-filter_threads', '1',
       '-filter_complex_threads', '1',
       '-preset', 'ultrafast',
-      '-crf', '26',
+      '-tune', 'fastdecode',
+      '-crf', '28',
       '-maxrate', '4M',
       '-bufsize', '2M',
       '-pix_fmt', 'yuv420p',
-      '-r', '30',
+      '-r', String(VIDEO_FPS),
       outputPath,
     ], {
       windowsHide: true,
@@ -233,7 +235,7 @@ function createAssContent(subtitleBeats) {
     '',
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
-    `Style: Default,${fontName},82,&H00FFFFFF,&H0000E6FF,&H00101010,&H64000000,-1,0,0,0,100,100,0,0,1,6,2,2,70,70,650,1`,
+    `Style: Default,${fontName},55,&H00FFFFFF,&H0000E6FF,&H00101010,&H64000000,-1,0,0,0,100,100,0,0,1,4,2,2,46,46,433,1`,
     '',
     '[Events]',
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
@@ -375,18 +377,17 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
       : "font='Sans'";
     let hookCardFilter;
     try {
-      hookCardFilter = `drawbox=x=54:y=518:w=972:h=300:color=black@0.7:t=fill:enable='between(t,0,0.5)',drawtext=${hookFont}:textfile='${escapeFilterPath(hookTextPath)}':fontcolor=0xFFE600:fontsize=82:borderw=4:bordercolor=black:shadowcolor=black@0.85:shadowx=4:shadowy=6:x=(w-text_w)/2:y=h*0.27+(300-text_h)/2:line_spacing=12:enable='between(t,0,0.5)'`;
+      hookCardFilter = `drawbox=x=36:y=345:w=648:h=200:color=black@0.7:t=fill:enable='between(t,0,0.5)',drawtext=${hookFont}:textfile='${escapeFilterPath(hookTextPath)}':fontcolor=0xFFE600:fontsize=55:borderw=3:bordercolor=black:shadowcolor=black@0.85:shadowx=3:shadowy=4:x=(w-text_w)/2:y=h*0.27+(200-text_h)/2:line_spacing=8:enable='between(t,0,0.5)'`;
     } catch (error) {
       console.warn(`[render] Could not configure the hook card; rendering without it: ${error.message}`);
     }
 
     const createVideoFilter = (includeHookCard) => {
       const filters = [
-        'scale=540:960:force_original_aspect_ratio=increase',
-        'crop=540:960',
-        'fps=30',
-        "zoompan=z='1+0.06*mod(floor(on/81),2)':d=1:s=540x960:fps=30",
-        `scale=${VIDEO_WIDTH}:${VIDEO_HEIGHT}`,
+        `scale=${VIDEO_WIDTH}:${VIDEO_HEIGHT}:force_original_aspect_ratio=decrease`,
+        `pad=${VIDEO_WIDTH}:${VIDEO_HEIGHT}:(ow-iw)/2:(oh-ih)/2`,
+        'setsar=1',
+        `fps=${VIDEO_FPS}`,
       ];
       if (includeHookCard && hookCardFilter) {
         filters.push(hookCardFilter);
@@ -434,13 +435,14 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
       command.complexFilter([videoFilter, ...audioFilters]);
       command.outputOptions([
         '-threads', '1',
+        '-tune', 'fastdecode',
         '-filter_threads', '1',
         '-filter_complex_threads', '1',
         '-map', '[vout]',
         '-map', '[aout]',
         '-t', String(voiceDurationSeconds),
         '-shortest',
-        '-r', '30',
+        '-r', String(VIDEO_FPS),
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
         '-crf', '28',
@@ -462,6 +464,7 @@ export async function renderShort({ voiceoverPath, hook, subtitleBeats, outputPa
         finishWithError(new Error(`FFmpeg render timed out after ${FFMPEG_TIMEOUT_MS / 1000} seconds and was terminated.`));
       }, FFMPEG_TIMEOUT_MS);
       command
+        .on('start', (commandLine) => console.info(`[render] FFmpeg command: ${commandLine}`))
         .on('error', (error, stdout, stderr) => {
           const diagnostic = typeof stderr === 'string'
             ? stderr.split(/\r?\n/).filter(Boolean).slice(-35).join('\n')
